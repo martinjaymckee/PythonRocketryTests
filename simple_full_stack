@@ -1,5 +1,0 @@
-import rocket_components
-
-def getFullStackShuttleModel():
-
-  return configurations

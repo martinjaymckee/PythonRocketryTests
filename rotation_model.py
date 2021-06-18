@@ -193,10 +193,58 @@ class RotationModel:
         return (x, dx, ddx)
 
 
-def plotRotationModel(title, fs, t0, t1, rotation_model):
-    ts, qws, p_ref, v_ref, a_ref = rotation_model.sample(0, t_max, fs)
+class RotationOrientationIntegrator:
+    def __init__(self, oversampling=None, dt_max=1e-1):
+        self.__oversampling = oversampling
+        self.__dt_max = dt_max
+
+    def __call__(self, dt, omegas, domegas=None, q0=None):
+        min_oversampling = int(dt / self.__dt_max)
+        oversampling = min_oversampling if self.__oversampling is None else max(min_oversampling, self.__oversampling)
+        dt_interp = dt / oversampling
+
+        def interpolatedOmegas(omega_0, omega_1, domega_0, domega_1):
+            ts_est = np.linspace(0, dt, oversampling)
+            a = (-2/dt)*(((omega_1 - omega_0)/dt**2) - ((domega_1 + domega_0)/(2*dt)))
+            b = (domega_1 - domega_0 - (3 * a * dt**2)) / (2*dt)
+            omegas_interp = (a * np.power(ts_est, 3)) + (b * np.square(ts_est)) + (domega_0*ts_est) + omega_0
+            # domegas_est = (3*a*np.square(ts_est)) + (2*b*ts_est) + domega_0
+            return omegas_interp
+
+        q0 = np.quaternion(1, 0, 0, 0) if q0 is None else q0
+        q = q0
+        qws = [q0]
+        omegas = np.array(omegas)
+        if domegas is None:
+            domegas = (omegas[:-1] - omegas[1:]) / dt
+        else:
+            domegas = np.array(domegas)
+        for idx in range(len(omegas[0])-1):
+            alpha_0, alpha_1 = omegas[0][idx], omegas[0][idx+1]
+            dalpha_0, dalpha_1 = domegas[0][idx], domegas[0][idx+1]
+            beta_0, beta_1 = omegas[1][idx], omegas[1][idx+1]
+            dbeta_0, dbeta_1 = domegas[1][idx], domegas[1][idx+1]
+            gamma_0, gamma_1 = omegas[2][idx], omegas[2][idx+1]
+            dgamma_0, dgamma_1 = domegas[2][idx], domegas[2][idx+1]
+            alphas = interpolatedOmegas(alpha_0, alpha_1, dalpha_0, dalpha_1)
+            betas = interpolatedOmegas(beta_0, beta_1, dbeta_0, dbeta_1)
+            gammas = interpolatedOmegas(gamma_0, gamma_1, dgamma_0, dgamma_1)
+            for alpha, beta, gamma in zip(alphas, betas, gammas):
+                q = q + 0.5 * dt_interp * q * np.quaternion(0, alpha, beta, gamma)
+            qws.append(q)
+        return np.array(qws)
+
+
+def plotRotationModel(title, fs, t0, t1, rotation_model, oversampling=None, offset_fig=None, offset_ax=None):
+    ts, qws, p_ref, v_ref, a_ref = rotation_model.sample(t0, t1, fs)
     fig, axs = plt.subplots(3, figsize=(15, 12), sharex=True)
     #fig.suptitle(title)
+    # N = len(ts)
+    # v_ref = [[0]*N, [0]*N, [0]*N]
+    # a_ref = [[0]*N, [0]*N, [0]*N]
+    dt = 1.0 / fs
+    interpolator = RotationOrientationIntegrator(oversampling=oversampling)
+    qws = interpolator(dt, v_ref, a_ref)
 
     axs[0].plot(ts, p_ref[0], c='b', alpha=0.5, label=r'$\alpha_{c}$')
     axs[0].plot(ts, p_ref[1], c='g', alpha=0.5, label=r'$\beta_{c}$')
@@ -219,12 +267,13 @@ def plotRotationModel(title, fs, t0, t1, rotation_model):
     fig.tight_layout()
 
     q0 = np.quaternion(1, 0, 0, 0)
-    fig, ax = plt.subplots(1, figsize=(18, 10))
+    if offset_ax is None:
+        offset_fig, offset_ax = plt.subplots(1, figsize=(18, 10))
     errs = [angleBetweenQs(q0, q) for q in qws]
-    sns.lineplot(x=ts, y=errs, ax=ax)
-    ax.set_title('Angle From Initial Orientation')
-    fig.tight_layout()
-    plt.show()
+    sns.lineplot(x=ts, y=errs, ax=offset_ax)
+    offset_ax.set_title('Angle From Initial Orientation')
+    # offset_fig.tight_layout()
+    return ts, qws
 
 
 def generateParamVector(p_min, p_max, N=3):
@@ -236,14 +285,27 @@ def generateParamVector(p_min, p_max, N=3):
 
 if __name__ == '__main__':
     random.seed(1234)  # Always produce the same rotational system
-    fs = 250
+
+    fs = 50
     t_max = 60
     f_base = generateParamVector(0.025, 0.075)
-    theta_max = generateParamVector(math.pi/12, math.pi/6)
-    print(f_base)
+    theta_max = generateParamVector(math.pi/20, math.pi/12)
     v_limit = generateParamVector(math.radians(1000), math.radians(2000))  # rad/s
-    print(v_limit)
-    terms = 25
+    terms = 9
 
+    fig, ax = plt.subplots(1, figsize=(18, 10))
+
+    random.seed(1234)  # Always produce the same rotational system
     rotation_model = RotationModel.Constrained(theta_max=theta_max, omega_max=v_limit, f_base=f_base, terms=terms)
-    plotRotationModel('Clean Rotation Model', fs, 0, t_max, rotation_model)
+    ts, qws_0 = plotRotationModel('Clean Rotation Model', fs, 0, t_max, rotation_model, oversampling=20, offset_fig=fig, offset_ax=ax)
+
+    random.seed(1234)  # Always produce the same rotational system
+    rotation_model = RotationModel.Constrained(theta_max=theta_max, omega_max=v_limit, f_base=f_base, terms=terms)
+    ts, qws_1 = plotRotationModel('Clean Rotation Model', fs, 0, t_max, rotation_model, oversampling=2, offset_fig=fig, offset_ax=ax)
+
+    ax1 = ax.twinx()
+    errs = [angleBetweenQs(q0, q1) for q0, q1 in zip(qws_0, qws_1)]
+    sns.lineplot(x=ts, y=errs, ax=ax1)
+    fig.tight_layout()
+
+    plt.show()

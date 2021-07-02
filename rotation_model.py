@@ -286,7 +286,7 @@ def generateParamVector(p_min, p_max, N=3):
 if __name__ == '__main__':
     random.seed(1234)  # Always produce the same rotational system
 
-    fs = 50
+    fs = 5
     t_max = 60
     f_base = generateParamVector(0.025, 0.075)
     theta_max = generateParamVector(math.pi/20, math.pi/12)

@@ -1,3 +1,7 @@
+# title = E-match
+# description = Cheap Chinese E-match ~$1\Omega$
+# battery = 180mAh 2s 25-40c
+# dt = 0.00285714
 0, 0, 0, 7.9248, 7.5997, 7.9311
 
 0, 1, 0, 7.9248, 7.5997, 7.9332

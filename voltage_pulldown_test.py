@@ -1,4 +1,3 @@
-
 import math
 
 import matplotlib.pyplot as plt
@@ -7,39 +6,44 @@ import seaborn as sns
 
 
 def parseVoltagePulldownData(file, dt=1):
-    ts = []
     firing = []
     Vbats = []
     Vmcus = []
     Vpyros = []
-    t = 0
+    vars = {}
     for line in file.readlines():
-        params = line.split(',')
-        if len(params) == 6:
-            ts.append(t)
-            t += dt
-            firing.append(int(params[2]))
-            Vbats.append(float(params[3]))
-            Vmcus.append(float(params[4]))
-            Vpyros.append(float(params[5]))
-    ts = np.array(ts)
+        line = line.strip()
+        if len(line) > 0:
+            if line[0] == '#':
+                try:
+                    key, _, value = line[1:].partition('=')
+                    vars[key.strip()] = value.strip()
+                except Exception as e:
+                    print(e)
+            else:
+                params = line.split(',')
+                if len(params) == 6:
+                    firing.append(int(params[2]))
+                    Vbats.append(float(params[3]))
+                    Vmcus.append(float(params[4]))
+                    Vpyros.append(float(params[5]))
     firing = np.array(firing)
     Vbats = np.array(Vbats)
     Vmcus = np.array(Vmcus)
     Vpyros = np.array(Vpyros)
-    return ts, firing, Vbats, Vmcus, Vpyros
+
+    dt = float(vars['dt']) if 'dt' in vars else dt
+    ts = np.array([idx * dt for idx in range(len(firing))])
+    start_idx = np.argmax(firing)
+    ts -= ts[start_idx]
+    return ts, firing, Vbats, Vmcus, Vpyros, vars
 
 
-if __name__ == '__main__':
-    file = open('voltage_pulldown_data_1.csv', 'r')
-    Vcritical = 3.65
-    ts, firing, Vbats, Vmcus, Vpyros = parseVoltagePulldownData(file, dt=1/300)
-
-    fig, ax = plt.subplots(1, figsize=(16, 9), sharex=True)
-
-    sns.lineplot(x=ts, y=Vbats, ax=ax, label='Battery Voltage')
-    sns.lineplot(x=ts, y=Vpyros, ax=ax, label='Pyro Voltage')
-    sns.lineplot(x=ts, y=Vmcus, ax=ax, label='MCU Voltage')
+def plotVoltagePulldownData(ts, firing, Vbats, Vmcus, Vpyros, vars, Vcritical=3.6, ax=None):
+    ax.set_title(vars['title'] if 'title' in vars else vars['filename'])
+    sns.lineplot(x=ts, y=Vbats, ax=ax, label='Vbat')
+    sns.lineplot(x=ts, y=Vpyros, ax=ax, label='Vpyro')
+    sns.lineplot(x=ts, y=Vmcus, ax=ax, label='Vmcu')
 
     ax.axhline(Vcritical, c='r', linestyle='dashed', alpha=0.5)
     cells = math.ceil(np.max(Vbats) / 4.2)
@@ -50,7 +54,6 @@ if __name__ == '__main__':
     t_end = None
     t_last = 0
     for idx, t in enumerate(ts):
-        # print('firing[{}] = {}'.format(idx, firing[idx]))
         if t_start is None:
             if firing[idx] == 1:
                 t_start = t_last
@@ -60,23 +63,74 @@ if __name__ == '__main__':
                 break
         t_last = t
 
-    ax.axvspan(t_start, t_end, facecolor='r', alpha=0.1)
-    ax.set_ylim(0, 4.2*cells + 0.2)
+    ax.axvspan(t_start, t_end, facecolor='crimson', alpha=0.05)
+    Vmin, Vmax = Vcritical - 0.2, 4.2*cells + 0.2
+    ax.set_ylim(Vmin, Vmax)
 
     ax.annotate(
-        'Vbat = {:0.2f}v, Vmcu = {:0.2f}v'.format(Vbats[0], Vmcus[0]),
+        'Vbat = {:0.2f}v\nVmcu = {:0.2f}v'.format(Vbats[0], Vmcus[0]),
         xy=(ts[0], Vmcus[0]),
-        xytext=(ts[5], Vmcus[0]-0.6),
+        xytext=(ts[5], Vmcus[0]-1.7),
         arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
     )
 
     ax.annotate(
-        'Vbat = {:0.2f}v, Vmcu = {:0.2f}v'.format(Vbats[-1], Vmcus[-1]),
+        'Vbat = {:0.2f}v\nVmcu = {:0.2f}v'.format(Vbats[-1], Vmcus[-1]),
         xy=(ts[-1], Vmcus[-1]),
-        xytext=(ts[-45], Vmcus[-45]-0.6),
+        xytext=(ts[-40], Vmcus[-40]-1.7),
         arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
     )
 
-    fig.tight_layout()
+    idx_min = np.argmin(Vmcus)
+    ax.annotate(
+        'Vmcu = {:0.2f}v'.format(Vmcus[idx_min]),
+        xy=(ts[idx_min], Vmcus[idx_min]),
+        xytext=(ts[idx_min + 5], Vmcus[idx_min]-0.5),
+        arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
+    )
 
+    if 'description' in vars:
+        V = Vmin + 0.33 * (Vmax - Vmin)
+        ax.annotate(vars['description'], xy=(ts[int(len(ts)/20)], V), c='b')
+
+
+def plotVoltagePulldownTests(filenames, dt=1/300, Vcritical=3.65):
+    if (filenames is None) or (len(filenames) < 1):
+        return
+    fig, axs = plt.subplots(len(filenames), figsize=(16, 9), sharex=True)
+    if len(filenames) == 1:
+        axs = [axs]
+    for idx, filename in enumerate(filenames):
+        with open(filename, 'r') as file:
+            values = parseVoltagePulldownData(file, dt=dt)
+            values[-1]['filename'] = filename
+            plotVoltagePulldownData(*values, Vcritical=Vcritical, ax=axs[idx])
+    fig.tight_layout()
+    mgr = fig.canvas.manager
+    mgr.window.showMaximized()
+
+
+if __name__ == '__main__':
+    filenames = [
+        'voltage_pulldown_data_1.csv',
+        'voltage_pulldown_data_2.csv',
+        'voltage_pulldown_data_3.csv'
+    ]
+    # filenames = [
+    #     'voltage_pulldown_data_1.csv',
+    #     'voltage_pulldown_data_2.csv',
+    #     'voltage_pulldown_data_3.csv',
+    #     'voltage_pulldown_data_4.csv',
+    #     'voltage_pulldown_data_5.csv',
+    #     'voltage_pulldown_data_6.csv'
+    # ]
+    # filenames = [
+    #     'voltage_pulldown_data_4.csv',
+    #     'voltage_pulldown_data_5.csv',
+    #     'voltage_pulldown_data_6.csv'
+    # ]
+    filenames = [
+        'voltage_pulldown_data_5.csv'
+    ]
+    plotVoltagePulldownTests(filenames)
     plt.show()

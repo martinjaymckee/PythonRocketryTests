@@ -198,37 +198,48 @@ class RotationOrientationIntegrator:
         self.__oversampling = oversampling
         self.__dt_max = dt_max
 
-    def __call__(self, dt, omegas, domegas=None, q0=None):
-        min_oversampling = int(dt / self.__dt_max)
-        oversampling = min_oversampling if self.__oversampling is None else max(min_oversampling, self.__oversampling)
-        dt_interp = dt / oversampling
-
-        def interpolatedOmegas(omega_0, omega_1, domega_0, domega_1):
+    def __call__(self, omegas, domegas=None, dt=None, ts=None, q0=None):
+        def interpolatedRates(dt, oversampling, omega_0, omega_1, domega_0, domega_1):
             ts_est = np.linspace(0, dt, oversampling)
             a = (-2/dt)*(((omega_1 - omega_0)/dt**2) - ((domega_1 + domega_0)/(2*dt)))
             b = (domega_1 - domega_0 - (3 * a * dt**2)) / (2*dt)
             omegas_interp = (a * np.power(ts_est, 3)) + (b * np.square(ts_est)) + (domega_0*ts_est) + omega_0
-            # domegas_est = (3*a*np.square(ts_est)) + (2*b*ts_est) + domega_0
-            return omegas_interp
+            domegas_interp = (3*a*np.square(ts_est)) + (2*b*ts_est) + domega_0
+            return omegas_interp, domegas_interp
 
         q0 = np.quaternion(1, 0, 0, 0) if q0 is None else q0
         q = q0
         qws = [q0]
         omegas = np.array(omegas)
+        ts = None if ts is None else np.array(ts)
+        dts = None if ts is None else ts[1:] - ts[:-1]
         if domegas is None:
-            domegas = (omegas[:-1] - omegas[1:]) / dt
+            diff_omegas = (omegas[:, :-1] - omegas[:, 1:])
+            diff_omegas = np.concatenate([diff_omegas, np.zeros((3, 1))], axis=1)
+            # NOTE: THIS ASSUMES THAT THE FINAL SLOPE IS ZERO.  IT MAY BE BETTER
+            #   TO APPROXIMATE IT AS AN AVERAGE OF THE LAST SEVERAL OR SOMETHING.
+            if dts is None:
+                domegas = diff_omegas / dt
+            else:
+                dts = np.append(dts, 1)
+                domegas = diff_omegas / dts
         else:
             domegas = np.array(domegas)
-        for idx in range(len(omegas[0])-1):
+        base_osr = self.__oversampling
+        for idx in range(omegas.shape[1]-1):
+            dt = dt if dts is None else dts[idx]
+            min_osr = int(math.ceil(dt / self.__dt_max))
+            osr = min_osr if base_osr is None else max(min_osr, base_osr)
             alpha_0, alpha_1 = omegas[0][idx], omegas[0][idx+1]
             dalpha_0, dalpha_1 = domegas[0][idx], domegas[0][idx+1]
             beta_0, beta_1 = omegas[1][idx], omegas[1][idx+1]
             dbeta_0, dbeta_1 = domegas[1][idx], domegas[1][idx+1]
             gamma_0, gamma_1 = omegas[2][idx], omegas[2][idx+1]
             dgamma_0, dgamma_1 = domegas[2][idx], domegas[2][idx+1]
-            alphas = interpolatedOmegas(alpha_0, alpha_1, dalpha_0, dalpha_1)
-            betas = interpolatedOmegas(beta_0, beta_1, dbeta_0, dbeta_1)
-            gammas = interpolatedOmegas(gamma_0, gamma_1, dgamma_0, dgamma_1)
+            alphas, dalphas = interpolatedRates(dt, osr, alpha_0, alpha_1, dalpha_0, dalpha_1)
+            betas, dbetas = interpolatedRates(dt, osr, beta_0, beta_1, dbeta_0, dbeta_1)
+            gammas, dgammas = interpolatedRates(dt, osr, gamma_0, gamma_1, dgamma_0, dgamma_1)
+            dt_interp = dt / osr
             for alpha, beta, gamma in zip(alphas, betas, gammas):
                 q = q + 0.5 * dt_interp * q * np.quaternion(0, alpha, beta, gamma)
             qws.append(q)
@@ -244,7 +255,8 @@ def plotRotationModel(title, fs, t0, t1, rotation_model, oversampling=None, offs
     # a_ref = [[0]*N, [0]*N, [0]*N]
     dt = 1.0 / fs
     interpolator = RotationOrientationIntegrator(oversampling=oversampling)
-    qws = interpolator(dt, v_ref, a_ref)
+    # qws = interpolator(v_ref, a_ref, dt=dt)
+    qws = interpolator(v_ref, a_ref, ts=ts)
 
     axs[0].plot(ts, p_ref[0], c='b', alpha=0.5, label=r'$\alpha_{c}$')
     axs[0].plot(ts, p_ref[1], c='g', alpha=0.5, label=r'$\beta_{c}$')
@@ -265,6 +277,7 @@ def plotRotationModel(title, fs, t0, t1, rotation_model, oversampling=None, offs
     for ax in axs:
         ax.legend()
     fig.tight_layout()
+    # fig.canvas.manager.window.setMaximized()
 
     q0 = np.quaternion(1, 0, 0, 0)
     if offset_ax is None:
@@ -307,5 +320,6 @@ if __name__ == '__main__':
     errs = [angleBetweenQs(q0, q1) for q0, q1 in zip(qws_0, qws_1)]
     sns.lineplot(x=ts, y=errs, ax=ax1)
     fig.tight_layout()
+    # fig.canvas.manager.window.setMaximized()
 
     plt.show()

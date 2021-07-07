@@ -114,6 +114,25 @@ def resistiveDivider(ratio, Rtot=10e3):
     return R1, R2
 
 
+def calcADCDivider(Vref, Vin_max, Rtot, Zin=100e3, f_bw=100, e=0.001):
+    R2 = (Rtot*Vref*Zin) / (Vin_max*Zin - Vref*Rtot)
+    R1 = ((R2 * Zin) / (R2 + Zin)) * ((Vin_max / Vref) - 1)
+    R2 = (1-e) * R2
+    R1 = (1+e) * R1
+    R2_final = discretes.Resistor.closest(R2)
+    R1_final = discretes.Resistor.closest(R1) if float(R2_final) <= R2 else discretes.Resistor.ceil(R1)
+    Reff = 1 / ((1/R1_final) + (1/R2_final) + (1/Zin))
+    C = 1 / (2 * math.pi * Reff * f_bw)
+    C = discretes.Capacitor.ceil(C)
+    params = {}
+    Rlower = (float(R2_final)*Zin) / (float(R2_final) + Zin)
+    params['Rtot'] = float(R1_final) + Rlower
+    params['Reff'] = Reff
+    params['ratio'] = Rlower / params['Rtot']
+    params['f_bw'] = 1 / (2 * math.pi * Reff * float(C))
+    return R1_final, R2_final, C, params
+
+
 if __name__ == '__main__':
     V_max = 12.6
     Vcc = 3.3
@@ -156,3 +175,8 @@ if __name__ == '__main__':
     print('R = {:0.2f} +/- {:0.3f} ohms'.format(R_mean, 3*R_sd))
     fig.tight_layout()
     # plt.show()
+
+    R1, R2, C, params = calcADCDivider(V_ref, V_max, 10e3)
+    print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
+    print(params)
+    print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))

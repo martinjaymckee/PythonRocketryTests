@@ -110,6 +110,16 @@ def plotVoltagePulldownTests(filenames, dt=1/300, Vcritical=3.65):
     mgr.window.showMaximized()
 
 
+def estimateSourceResistance(Vpyros, Rl):
+    # print('V[0] = {}, V[-1] = {}'.format(Vpyros[0], Vpyros[-1]))
+    Vin = Vpyros[-1]  # Use the recovered battery voltage as the reference
+    idx = np.argmin(Vpyros)
+    Vsense = Vpyros[idx]
+    Rs = Rl * ((Vin - Vsense) / Vsense)
+    Il = Vsense / Rl
+    return Rs, Il
+
+
 if __name__ == '__main__':
     filenames = [
         'voltage_pulldown_data_1.csv',
@@ -134,3 +144,14 @@ if __name__ == '__main__':
     ]
     plotVoltagePulldownTests(filenames)
     plt.show()
+
+    filenames = [
+        ('voltage_pulldown_data_1.csv', 1),
+        ('voltage_pulldown_data_2.csv', 0.5)
+    ]
+
+    for (filename, Rl) in filenames:
+        with open(filename, 'r') as file:
+            ts, firing, Vbats, Vmcus, Vpyros, vars = parseVoltagePulldownData(file)
+            Rs, Il = estimateSourceResistance(Vpyros, Rl)
+            print('Rs = {:0.4f} ohm, I = {:0.2f} A'.format(Rs, Il))

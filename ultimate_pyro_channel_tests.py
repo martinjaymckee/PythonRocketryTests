@@ -114,7 +114,16 @@ def resistiveDivider(ratio, Rtot=10e3):
     return R1, R2
 
 
-def calcADCDivider(Vref, Vin_max, Rtot, Zin=100e3, f_bw=100, e=0.001):
+def calcADCDivider(Vref, Vin_max, Rtot=None, Zin=100e3, f_bw=50, e=0.001):
+    # TODO: NEED TO MAKE THIS WORK WITH A VARIABLE ZIN.  FIRST, CALCULATE THE DIVIDER FOR THE
+    #   TOTAL RANGE OF ZIN VALUES, THEN CHOOSE DIVIDER VALUES THAT ALLOW FOR calibration
+    #   OF ANY ERRORS.  FINALLY, ESTIMATE THE EFFECTS OF RESISTOR ERRORS, ZIN CHANGES, ETC.
+    # TODO: CALCULATE DIVIDER OUTPUT RATE OF CHANGE FUNCTIONS
+    #   dVadc/dR1
+    #   dVadc/dR2
+    #   dVadc/dZin
+    # TODO: ESTIMATE ADC READING ERROR BASED ON ZIN RANGE AND RESISTOR ERRORS
+    Rtot = Zin / 10 if Rtot is None else Rtot
     R2 = (Rtot*Vref*Zin) / (Vin_max*Zin - Vref*Rtot)
     R1 = ((R2 * Zin) / (R2 + Zin)) * ((Vin_max / Vref) - 1)
     R2 = (1-e) * R2
@@ -130,7 +139,30 @@ def calcADCDivider(Vref, Vin_max, Rtot, Zin=100e3, f_bw=100, e=0.001):
     params['Reff'] = Reff
     params['ratio'] = Rlower / params['Rtot']
     params['f_bw'] = 1 / (2 * math.pi * Reff * float(C))
+    params['error'] = 0  # Estimated error range in percent
     return R1_final, R2_final, C, params
+
+
+def calcResistanceSenseParameters(Rmin, Isafe=0.3, safety_factor=300, min_samples=25, bits=12, Voffset=50e-6):
+    """
+        Rmin - the minimum resistor value that needs to be accurate (>min_samples)
+        Isafe - the maximum no-fire current of the possible initiators to be used
+        safety_factor - the maximum amount to divide the no-fire current by for resistance testing
+        min_samples - a minimum number of samples... greater than the ADC noise Floor
+        bits - the resolution of the ADC
+    """
+    Rres = Rmin / min_samples
+    Rmax = 2**bits * Rres
+    Isense_max = Isafe / safety_factor
+    Isense_test = Isense_max / 2
+    Rsense_fs = Rmax * Isense_test
+
+    params = {}
+    params['fs_ratio'] = Rsense_fs / Voffset
+    params['min_ratio'] = (Rmin * Isense_test) / Voffset
+
+    print(params)
+    return Rmax, Rres, Isense_max, Rsense_fs, params
 
 
 if __name__ == '__main__':
@@ -139,7 +171,7 @@ if __name__ == '__main__':
     V_ref = 3.3
     Av = 50.0
     Rfire = (2.5e-3, 4e-3)
-    Icont_max = 3e-3
+    Icont_max = 1.5e-3
     Imax, Ires, Rmax, Rres, R3 = calcMeasurementLimits(V_max, V_ref, Av, Av, Rfire, Icont_max=Icont_max)
     print('Imax = {:0.2f} A (resolution {:0.3f} mA)'.format(Imax, 1000*Ires))
     print('Rmax = {:0.2f} ohms (resolution {:0.3f} ohms)'.format(Rmax, Rres))
@@ -176,7 +208,35 @@ if __name__ == '__main__':
     fig.tight_layout()
     # plt.show()
 
-    R1, R2, C, params = calcADCDivider(V_ref, V_max, 10e3)
+    # Note: Here the minimum possible Vref is being used, assuming a +/- 1% voltage regulator.
+    # Note: Calculating with the highest Zin possible will result in an underestimation of the
+    #   voltage and - as such = provide headroom for calibration.
+    #
+    Rtot = 25e3
+    Vref_min = 0.99 * V_ref
+    print('Calc ADC Divider with Zin = 150k:')
+    R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot, Zin=150e3)
     print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
     print(params)
     print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
+
+    print('\nCalc ADC Divider with Zin = 100k:')
+    R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot)
+    print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
+    print(params)
+    print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
+
+    print('\nCalc ADC Divider with Zin = 50k:')
+    R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot, Zin=50e3)
+    print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
+    print(params)
+    print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
+
+    # TODO: THIS SHOULD PROBABLY BE USED TO CALCULATE THE BEST RANGE OF TEST CURRENT AND MAXIMUM RESISTANCE
+    #   MEASURED.  THIS SHOULD ENSURE THAT THE MAXIMUM RESISTANCE IS AT LEAST AS HIGH AS THE LARGEST
+    #   INITIATOR LIKELY TO BE MEASURED.  ALSO, SOME ANALYSIS OF THE INFORMATION INHERENT IN THE ADC SIGNALS
+    #   NEEDS TO BE DONE SO THAT THE ACCURACY GOALS ARE CAPABLE OF BEING HIT.
+    print()
+    Rmax, Rres, Isense_max, Rsense_fs, _ = calcResistanceSenseParameters(0.1)
+    print('Rmax = {:0.2f} ohms, Rres = {:0.2f} mohms'.format(Rmax, 1000*Rres))
+    print('Isense_max = {:0.3f} mA, Rsense_fs = {:0.3f} v'.format(1000*Isense_max, Rsense_fs))

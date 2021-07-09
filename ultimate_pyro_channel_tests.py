@@ -143,7 +143,79 @@ def calcADCDivider(Vref, Vin_max, Rtot=None, Zin=100e3, f_bw=50, e=0.001):
     return R1_final, R2_final, C, params
 
 
-def calcResistanceSenseParameters(Rmin, Isafe=0.3, safety_factor=300, min_samples=25, bits=12, Voffset=50e-6):
+def calcResistanceSenseErrors(Rign_range, Vref, Vin_range, R3, R45, N_channels=4, p_r=1e-3, p_amp=1e-2, sd_adc=0, sd_amp=2.4e-5, N_samples=1):
+    Avs = [20, 50, 100, 200]  # INA180 Gains
+    # Avs = [25, 50, 100, 200, 500]  # INA186 Gains
+    Avs = sorted(Avs)
+    adc_inl = 2  # lsb
+    adc_dnl = 3  # lsb
+    adc_noise = 7   # lsb
+    adc_bits = 12
+
+    def calcItest(Vin, R3, Rign_a, R45_a, Rign_b, R45_b):
+        Itot = Vin / (R3 + (parRs([(Rign_a + R45_a), ((Rign_b + R45_b) / N_channels)])))
+        Itest = (Vin - (Itot * R3)) / (Rign_a + R45_a)
+        print('Itot = {:0.3f} mA, Itest = {:0.3f} mA, V2 = {:0.3f} v'.format(1000*Itot, 1000*Itest, (Vin - (Itot * R3))))
+        return Itest, Itot
+
+    Vin_min, Vin_max = Vin_range
+    Rign_min, Rign_max = Rign_range
+
+    def calcItestError(Vin, Rign):
+        # Calculate Itest_max
+        R3_est = (1-p_r) * R3
+        R45_a_est = (1+p_r) * R45
+        Rign_b = Rign_max
+        R45_b_est = (1+p_r) * R45
+        Itest_max, _ = calcItest(Vin_max, R3_est, Rign, R45_a_est, Rign_b, R45_b_est)
+
+        # Calculate Itest_min
+        R3_est = (1+p_r) * R3
+        R45_a_est = (1+p_r) * R45
+        Rign_b = Rign_min
+        R45_b_est = (1-p_r) * R45
+        Itest_min, _ = calcItest(Vin_max, R3_est, Rign, R45_a_est, Rign_b, R45_b_est)
+
+        Itest_err = abs((Itest_max - Itest_min) / Itest_min)
+        print('Itest range = {:0.5f} mA to {:0.5f} mA'.format(1000*Itest_min, 1000*Itest_max))
+        print('Itest_err = {:0.4f} %'.format(100 * Itest_err))
+        return Itest_err
+
+    Itest_err_Rmin = calcItestError(Vin_max, Rign_min)
+    Itest_err_Rmax = calcItestError(Vin_max, Rign_max)
+
+    Itest, _ = calcItest(Vin_min, R3, Rign_min, R45, Rign_min, R45)
+    Av_r_optimal = Vref / ((1+p_amp) * Itest * Rign_max)
+    print('Av_r_optimal = {:0.2f}'.format(Av_r_optimal))
+    Av_r = Avs[0]
+    for Av in Avs:
+        if Av_r_optimal >= Av:
+            Av_r = Av
+        else:
+            break
+    print('Av_r = {:0.2f}'.format(Av_r))
+    adc_Rmin = math.ceil((2**adc_bits) * ((1-p_amp) * Av_r * Itest * Rign_min) / Vref)
+    print('adc_Rmin = {} counts'.format(adc_Rmin))
+    adc_nl_err_Rmin = abs((adc_inl + adc_dnl + 1/2) / adc_Rmin)  # ADC non-linearity and quantization
+    print('adc_nl_err_Rmin = {:0.4f} %'.format(100 * adc_nl_err_Rmin))
+    adc_Rmax = math.ceil((2**adc_bits) * ((1-p_amp) * Av_r * Itest * Rign_max) / Vref)
+    adc_nl_err_Rmax = abs((adc_inl + adc_dnl + 1/2) / adc_Rmax)  # ADC non-linearity and quantization
+    print('adc_nl_err_Rmax = {:0.4f} %'.format(100 * adc_nl_err_Rmax))
+
+    sd_adc = adc_noise / (3*(2**adc_bits))
+    SE_noise_err = abs((sd_adc + ((1+p_amp)*Av_r*sd_amp)) / math.sqrt(N_samples))
+    print('SE_noise_err = {:0.4f} %'.format(100 * SE_noise_err))
+
+    adc_err_Rmin = Itest_err_Rmin + SE_noise_err + adc_nl_err_Rmin
+    adc_err_Rmax = Itest_err_Rmax + SE_noise_err + adc_nl_err_Rmax
+    print('adc_err = ({:0.4f} %, {:0.4f} %)'.format(100 * adc_err_Rmin, 100 * adc_err_Rmax))
+
+
+def calcOptimalResistanceSenseCurrent(Rmin, Voffset=500e-6, sense_scale=1.0):
+    return (sense_scale * Voffset) / Rmin
+
+
+def calcResistanceSenseParameters(Rmin, Vref, Isafe=0.3, safety_factor=50, min_samples=25, bits=12, Voffset=150e-6, sense_scale=2.1):
     """
         Rmin - the minimum resistor value that needs to be accurate (>min_samples)
         Isafe - the maximum no-fire current of the possible initiators to be used
@@ -153,26 +225,29 @@ def calcResistanceSenseParameters(Rmin, Isafe=0.3, safety_factor=300, min_sample
     """
     Rres = Rmin / min_samples
     Rmax = 2**bits * Rres
-    Isense_max = Isafe / safety_factor
-    Isense_test = Isense_max / 2
-    Rsense_fs = Rmax * Isense_test
+    Itest_max = Isafe / safety_factor
+    Itest_optimal = calcOptimalResistanceSenseCurrent(Rmin, Voffset, sense_scale)
+    print('Itest_optimal = {:0.3f} mA'.format(1000 * Itest_optimal))
+    Itest = min(Itest_max, Itest_optimal)
+    Rsense_fs = Rmax * Itest
 
     params = {}
     params['fs_ratio'] = Rsense_fs / Voffset
-    params['min_ratio'] = (Rmin * Isense_test) / Voffset
-
+    params['min_ratio'] = (Rmin * Itest) / Voffset
+    params['gain'] = Vref / (Rmax * Itest)
     print(params)
-    return Rmax, Rres, Isense_max, Rsense_fs, params
+    return Rmax, Rres, Itest_max, Itest, Rsense_fs, params
 
 
 if __name__ == '__main__':
     V_max = 12.6
     Vcc = 3.3
     V_ref = 3.3
-    Av = 50.0
+    Av_i = 50.0
+    Av_r = 50.0
     Rfire = (2.5e-3, 4e-3)
     Icont_max = 1.5e-3
-    Imax, Ires, Rmax, Rres, R3 = calcMeasurementLimits(V_max, V_ref, Av, Av, Rfire, Icont_max=Icont_max)
+    Imax, Ires, Rmax, Rres, R3 = calcMeasurementLimits(V_max, V_ref, Av_i, Av_r, Rfire, Icont_max=Icont_max)
     print('Imax = {:0.2f} A (resolution {:0.3f} mA)'.format(Imax, 1000*Ires))
     print('Rmax = {:0.2f} ohms (resolution {:0.3f} ohms)'.format(Rmax, Rres))
     print('R3 = {} ohms'.format(R3))
@@ -182,7 +257,7 @@ if __name__ == '__main__':
     print('R1 = {:0.1f} ohms, R2 = {:0.1f}'.format(R1, R2))
     print('R4 = {:0.1f} ohms, R5 = {:0.1f}'.format(R4, R5))
 
-    pyro = PyroChannel(Vcc, R1, R2, R3, R4, R5, Av, Av)
+    pyro = PyroChannel(Vcc, R1, R2, R3, R4, R5, Av_r, Av_i)
     Rsense_adc = ADCChannel(V_ref)
     estimator_R = ResistanceEstimator.Default()
 
@@ -196,7 +271,7 @@ if __name__ == '__main__':
             I, Vbat_sense, Vcont_sense, Rsense, Isense = pyro(V_max, Rign)
             adc = Rsense_adc(Rsense)
             adc_sum += adc
-        Rs.append(estimator_R(adc_sum/N, V_ref, V_max, Rcont, Av))
+        Rs.append(estimator_R(adc_sum/N, V_ref, V_max, Rcont, Av_r))
 
     fig, ax = plt.subplots(1, figsize=(15, 10))
     sns.distplot(Rs, ax=ax)
@@ -237,6 +312,16 @@ if __name__ == '__main__':
     #   INITIATOR LIKELY TO BE MEASURED.  ALSO, SOME ANALYSIS OF THE INFORMATION INHERENT IN THE ADC SIGNALS
     #   NEEDS TO BE DONE SO THAT THE ACCURACY GOALS ARE CAPABLE OF BEING HIT.
     print()
-    Rmax, Rres, Isense_max, Rsense_fs, _ = calcResistanceSenseParameters(0.1)
+    Rmax, Rres, Isense_max, Itest, Rsense_fs, params = calcResistanceSenseParameters(0.1, 3.3)
     print('Rmax = {:0.2f} ohms, Rres = {:0.2f} mohms'.format(Rmax, 1000*Rres))
-    print('Isense_max = {:0.3f} mA, Rsense_fs = {:0.3f} v'.format(1000*Isense_max, Rsense_fs))
+    print('Isense_max = {:0.3f} mA, Itest = {:0.3f} mA, Rsense_fs = {:0.3f} v'.format(1000*Isense_max, 1000*Itest, Rsense_fs))
+    print(params)
+
+    print()
+    Itest_optimal = calcOptimalResistanceSenseCurrent(0.1)
+    print('Itest_optimal = {:0.2f} mA'.format(1000 * Itest_optimal))
+
+    R45 = R3 = 1050
+    Rign_range = (0.4, 5)
+    print('R3 = {} ohms'.format(R3))
+    calcResistanceSenseErrors(Rign_range, 3.3, (4.2, 12.6), R3, R45)

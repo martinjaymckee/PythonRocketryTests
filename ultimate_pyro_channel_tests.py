@@ -143,19 +143,18 @@ def calcADCDivider(Vref, Vin_max, Rtot=None, Zin=100e3, f_bw=50, e=0.001):
     return R1_final, R2_final, C, params
 
 
-def calcResistanceSenseErrors(Rign_range, Vref, Vin_range, R3, R45, N_channels=4, p_r=1e-3, p_amp=1e-2, sd_adc=0, sd_amp=2.4e-5, N_samples=1):
-    Avs = [20, 50, 100, 200]  # INA180 Gains
-    # Avs = [25, 50, 100, 200, 500]  # INA186 Gains
+def calcResistanceSenseErrors(Rign_range, Vref, Vin_range, R3, R45, N_channels=4, p_r=1e-3, p_amp=1e-2, sd_amp=2.4e-5, Voffset_amp=500e-6, N_samples=10, Avs=None):
+    Avs = [20, 50, 100, 200] if Avs is None else Avs  # Default to INA180 Gains
     Avs = sorted(Avs)
     adc_inl = 2  # lsb
     adc_dnl = 3  # lsb
-    adc_noise = 7   # lsb
-    adc_bits = 12
+    adc_noise = 25   # lsb
+    adc_bits = 12  # NOTE: THIS IS THE MOST POWERFUL KNOB I HAVE TO MINIMIZE ERROR.  LOOK AT POSSIBLITY OF OVERSAMPLING....
 
     def calcItest(Vin, R3, Rign_a, R45_a, Rign_b, R45_b):
         Itot = Vin / (R3 + (parRs([(Rign_a + R45_a), ((Rign_b + R45_b) / N_channels)])))
         Itest = (Vin - (Itot * R3)) / (Rign_a + R45_a)
-        print('Itot = {:0.3f} mA, Itest = {:0.3f} mA, V2 = {:0.3f} v'.format(1000*Itot, 1000*Itest, (Vin - (Itot * R3))))
+        # print('Itot = {:0.3f} mA, Itest = {:0.3f} mA, V2 = {:0.3f} v'.format(1000*Itot, 1000*Itest, (Vin - (Itot * R3))))
         return Itest, Itot
 
     Vin_min, Vin_max = Vin_range
@@ -177,14 +176,14 @@ def calcResistanceSenseErrors(Rign_range, Vref, Vin_range, R3, R45, N_channels=4
         Itest_min, _ = calcItest(Vin_max, R3_est, Rign, R45_a_est, Rign_b, R45_b_est)
 
         Itest_err = abs((Itest_max - Itest_min) / Itest_min)
-        print('Itest range = {:0.5f} mA to {:0.5f} mA'.format(1000*Itest_min, 1000*Itest_max))
-        print('Itest_err = {:0.4f} %'.format(100 * Itest_err))
+        # print('Itest range = {:0.5f} mA to {:0.5f} mA'.format(1000*Itest_min, 1000*Itest_max))
+        # print('Itest_err = {:0.4f} %'.format(100 * Itest_err))
         return Itest_err
 
     Itest_err_Rmin = calcItestError(Vin_max, Rign_min)
     Itest_err_Rmax = calcItestError(Vin_max, Rign_max)
 
-    Itest, _ = calcItest(Vin_min, R3, Rign_min, R45, Rign_min, R45)
+    Itest, _ = calcItest(Vin_max, R3, Rign_min, R45, Rign_min, R45)
     Av_r_optimal = Vref / ((1+p_amp) * Itest * Rign_max)
     print('Av_r_optimal = {:0.2f}'.format(Av_r_optimal))
     Av_r = Avs[0]
@@ -194,21 +193,28 @@ def calcResistanceSenseErrors(Rign_range, Vref, Vin_range, R3, R45, N_channels=4
         else:
             break
     print('Av_r = {:0.2f}'.format(Av_r))
+    Itest, _ = calcItest(Vin_min, R3, Rign_min, R45, Rign_min, R45)
     adc_Rmin = math.ceil((2**adc_bits) * ((1-p_amp) * Av_r * Itest * Rign_min) / Vref)
     print('adc_Rmin = {} counts'.format(adc_Rmin))
-    adc_nl_err_Rmin = abs((adc_inl + adc_dnl + 1/2) / adc_Rmin)  # ADC non-linearity and quantization
+    adc_nl_err_Rmin = abs((max(adc_inl, adc_dnl) + 1/2) / adc_Rmin)  # ADC non-linearity and quantization
     print('adc_nl_err_Rmin = {:0.4f} %'.format(100 * adc_nl_err_Rmin))
     adc_Rmax = math.ceil((2**adc_bits) * ((1-p_amp) * Av_r * Itest * Rign_max) / Vref)
-    adc_nl_err_Rmax = abs((adc_inl + adc_dnl + 1/2) / adc_Rmax)  # ADC non-linearity and quantization
+    print('adc_Rmax = {} counts'.format(adc_Rmax))
+    adc_nl_err_Rmax = abs((max(adc_inl, adc_dnl) + 1/2) / adc_Rmax)  # ADC non-linearity and quantization
     print('adc_nl_err_Rmax = {:0.4f} %'.format(100 * adc_nl_err_Rmax))
 
     sd_adc = adc_noise / (3*(2**adc_bits))
     SE_noise_err = abs((sd_adc + ((1+p_amp)*Av_r*sd_amp)) / math.sqrt(N_samples))
-    print('SE_noise_err = {:0.4f} %'.format(100 * SE_noise_err))
+    # print('SE_noise_err = {:0.4f} %'.format(100 * SE_noise_err))
 
     adc_err_Rmin = Itest_err_Rmin + SE_noise_err + adc_nl_err_Rmin
     adc_err_Rmax = Itest_err_Rmax + SE_noise_err + adc_nl_err_Rmax
     print('adc_err = ({:0.4f} %, {:0.4f} %)'.format(100 * adc_err_Rmin, 100 * adc_err_Rmax))
+
+    Itest, _ = calcItest(Vin_max, R3, Rign_max, R45, Rign_max, R45)
+    Rign_max_true = Vref / ((1+p_amp) * Itest * Av_r)
+    Rign_res = Rign_max_true / (2**adc_bits)
+    print('Rign_max = {:0.2f} ohms, Rign resolution = {:0.3f} mohms'.format(Rign_max_true, 1000*Rign_res))
 
 
 def calcOptimalResistanceSenseCurrent(Rmin, Voffset=500e-6, sense_scale=1.0):
@@ -240,6 +246,9 @@ def calcResistanceSenseParameters(Rmin, Vref, Isafe=0.3, safety_factor=50, min_s
 
 
 if __name__ == '__main__':
+    INA180_Avs = [20, 50, 100, 200]  # INA180 Gains
+    INA186_Avs = [25, 50, 100, 200, 500]  # INA186 Gains
+
     V_max = 12.6
     Vcc = 3.3
     V_ref = 3.3
@@ -292,19 +301,19 @@ if __name__ == '__main__':
     print('Calc ADC Divider with Zin = 150k:')
     R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot, Zin=150e3)
     print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
-    print(params)
+    # print(params)
     print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
 
     print('\nCalc ADC Divider with Zin = 100k:')
     R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot)
     print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
-    print(params)
+    # print(params)
     print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
 
     print('\nCalc ADC Divider with Zin = 50k:')
     R1, R2, C, params = calcADCDivider(Vref_min, V_max, Rtot=Rtot, Zin=50e3)
     print('R1 = {:0.2f} ohms, R2 = {:0.2f} ohms, C = {:0.2f} uF'.format(R1, R2, 1e6*C))
-    print(params)
+    # print(params)
     print('ratio * V_max = {:0.2f} v'.format(V_max * params['ratio']))
 
     # TODO: THIS SHOULD PROBABLY BE USED TO CALCULATE THE BEST RANGE OF TEST CURRENT AND MAXIMUM RESISTANCE
@@ -315,13 +324,14 @@ if __name__ == '__main__':
     Rmax, Rres, Isense_max, Itest, Rsense_fs, params = calcResistanceSenseParameters(0.1, 3.3)
     print('Rmax = {:0.2f} ohms, Rres = {:0.2f} mohms'.format(Rmax, 1000*Rres))
     print('Isense_max = {:0.3f} mA, Itest = {:0.3f} mA, Rsense_fs = {:0.3f} v'.format(1000*Isense_max, 1000*Itest, Rsense_fs))
-    print(params)
+    # print(params)
 
     print()
     Itest_optimal = calcOptimalResistanceSenseCurrent(0.1)
     print('Itest_optimal = {:0.2f} mA'.format(1000 * Itest_optimal))
 
-    R45 = R3 = 1050
-    Rign_range = (0.4, 5)
-    print('R3 = {} ohms'.format(R3))
-    calcResistanceSenseErrors(Rign_range, 3.3, (4.2, 12.6), R3, R45)
+    R45 = R3 = 1300
+    Rign_range = (0.4, 10)
+    print()
+    # print('R3 = {} ohms'.format(R3))
+    calcResistanceSenseErrors(Rign_range, V_ref, (3.7, 12.6), R3, R45, N_channels=4, Avs=INA180_Avs)

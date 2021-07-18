@@ -66,10 +66,10 @@ def calcResistorMeasurementAccuracy(bits, Vin, Vref, Rs, Rb, Re=0, Rb_accuracy=0
     Rs_est_min = Vs_adc_min * Rb / Vb_adc_max
     Rs_est_max = Vs_adc_max * Rb / Vb_adc_min
     # print('Rs = {:0.4f} ohms, Vb = {:0.4f} v, Itest = {:0.4f} mA'.format(Rs, Vb, 1000*I_test))
-    # print('adc_Rb_min = {}'.format(adc_Rb_min))
+    # print('adc_Rs_min = {}, adc_Rb_min = {}'.format(adc_Rs_min, adc_Rb_min))
     offset = 0 if Rs_est_min == 0 else (100 * (Rs_est_max - Rs_est_min) / Rs_est_min)
     offset += Rb_accuracy
-    noise = johnsonNoise(Rb+Rs+Re, BW)
+    noise = johnsonNoise(Rb+Rs+Re, BW)  # NOTE: THIS IS JUST A HACK TO GET AN ESTIMATE OF THE JOHNSON NOISE IN....
     # print('Johnson Noise = {:0.4f} nV'.format(1e9 * noise))
     noise = 100 * noise / Vs
     return offset, noise
@@ -77,14 +77,15 @@ def calcResistorMeasurementAccuracy(bits, Vin, Vref, Rs, Rb, Re=0, Rb_accuracy=0
 
 if __name__ == '__main__':
     Vref = 2.5
-    Rs_range = (1e-2, 1e6)
-    noise_free_bits = 26
+    Rs_range = (1e-4, 1)
+    noise_free_bits = 24
     ad7177_ch0 = ADCChannel(Vref, bits=32, noise_free_bits=noise_free_bits, Av_err=0.1e-6)
     ad7177_ch1 = ADCChannel(Vref, bits=32, noise_free_bits=noise_free_bits, Av_err=0.1e-6)
 
     Vin = 2.5
-    Rb = 10
+    Rb = 100
     target_accuracy_percent = 0.015
+    critical_accuracy_percentage = 0.1
     N_min = calcMinimumCounts(target_accuracy_percent)
     Rs_max = calcErrorLimitedResistance(Rb, bits=ad7177_ch0.noise_free_bits, N_min=N_min, Re=10)
     print('Rs_max = {} ohms'.format(Rs_max))
@@ -94,17 +95,30 @@ if __name__ == '__main__':
     dRs = []
     uppers = []
     lowers = []
-    for Rs in Rss:
+    idx_start = None
+    idx_end = None
+    for idx, Rs in enumerate(Rss):
         dR, noise = calcResistorMeasurementAccuracy(bits, Vin, Vref, Rs, Rb, Re=1.5)
         dRs.append(dR)
         uppers.append(dR + noise)
         lowers.append(dR - noise)
+        if idx_start is None:
+            if dR < critical_accuracy_percentage:
+                print(dR, critical_accuracy_percentage)
+                idx_start = idx
+        else:
+            if (idx_end is None) and (dR >= critical_accuracy_percentage):
+                idx_end = idx
+    print(idx_start, idx_end)
+    idx_start = 0 if idx_start is None else idx_start
+    idx_end = -1 if idx_end is None else idx_end
+    print(idx_start, idx_end)
     fig, ax = plt.subplots(1, figsize=(16, 9))
-    sns.lineplot(x=Rss, y=dRs, ax=ax)
-    ax.axhline(target_accuracy_percent, c='m', alpha=0.25)
-    ax.plot(Rss, lowers, c='tab:blue', alpha=0.1)
-    ax.plot(Rss, uppers, c='tab:blue', alpha=0.1)
-    ax.fill_between(Rss, lowers, uppers, alpha=0.2)
+    sns.lineplot(x=Rss[idx_start:idx_end], y=dRs[idx_start:idx_end], ax=ax)
+    ax.axhspan(0, target_accuracy_percent, fc='g', alpha=0.1)
+    ax.plot(Rss[idx_start:idx_end], lowers[idx_start:idx_end], c='tab:blue', alpha=0.1)
+    ax.plot(Rss[idx_start:idx_end], uppers[idx_start:idx_end], c='tab:blue', alpha=0.1)
+    ax.fill_between(Rss[idx_start:idx_end], lowers[idx_start:idx_end], uppers[idx_start:idx_end], alpha=0.2)
     # print('dR = {:0.3f} %'.format(dR_percent))
     fig.tight_layout()
     plt.show()

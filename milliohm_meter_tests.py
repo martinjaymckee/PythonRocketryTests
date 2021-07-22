@@ -7,7 +7,7 @@ import seaborn as sns
 
 import adc_models
 import electronics.discretes as discretes
-from normal_rvs import NRV
+import normal_rvs
 
 
 def calcMinimumCounts(accuracy, oversampling=5):
@@ -18,68 +18,93 @@ def calcErrorLimitedResistance(Rb, bits=10, N_min=None, Re=0):
     N_min = (2**bits) / 10 if N_min is None else N_min
     return ((2**bits) / N_min) * (Rb - ((N_min/(2**bits))*(Rb+Re)))
 
-
-# def calcResistorMeasurementAccuracy(bits, Vin, Vref, Rs, Rb, Re=0):
-#     return 100 / math.floor(((2**bits) * (Vin * Rb) / (Vref * (Rb + Rs + Re))))
-
-
 def johnsonNoise(R, BW, T=300):
     kb = 1e6 * 1.380649e-23  # Boltzmann's constant
     return math.sqrt(4 * kb * T * R * BW)
 
 
-def calcResistorMeasurementAccuracy(Vin, Vref, Rs, Rb, adc_b, adc_s, Re=0, Rb_accuracy=0.01, BW=50):
+def oversamplingBits(N):
+    assert N > 0, 'Error: Unable to calculculate oversampling bits with negative number of samples ({})'.format(N)
+    return math.log(N) / math.log(4)
+
+
+def calcResistorMeasurementAccuracy(Vin, Rs, Rb, adc_b, adc_s, Re=0, Rb_accuracy=0.01, BW=50, N=1, oversampling=False):
     def volts(adc, bits):
-        return Vref * adc / 2**bits
+        return adc_b.Vref.mean * adc / 2**bits
 
     def adcCounts(gain, V, bits):
         def clipADC(counts):
-            if counts > 2**bits:
-                print('V actual = {} v, V estimated = {}'.format(gain * V, volts(counts, bits)))
             return min(counts, 2**bits)
-        minimum = clipADC(math.floor(gain * (2**bits) * V / Vref))
+        minimum = clipADC(math.floor(gain * (2**bits) * V / adc_b.Vref.mean))
         maximum = clipADC(minimum + 1)
-        best = clipADC(int((gain * (2**bits) * V / Vref) + 0.5))
+        best = clipADC(int((gain * (2**bits) * V / adc_b.Vref.mean) + 0.5))
         return minimum, best, maximum
+
+    def Itest_est(Vb):
+        return Vb / Rb
+
+    def Rs_est(gain, Vs, Itest):
+        return Vs / (gain * Itest)
 
     I_test = Vin / (Rb + Rs + Re)
     Vb = Rb * I_test
     Vs = Rs * I_test
-    bits_b, bits_s = adc_b.enob, adc_s.enob
+    bits_os = 0 if not oversampling else oversamplingBits(N)
+    bits_b, bits_s = adc_b.enob + bits_os, adc_s.enob + bits_os
     adc_Rb_min, adc_Rb_best, adc_Rb_max = adcCounts(adc_b.gain, Vb, bits_b)
     adc_Rs_min, adc_Rs_best, adc_Rs_max = adcCounts(adc_s.gain, Vs, bits_s)
     Vb_min, Vb_best, Vb_max = volts(adc_Rb_min, bits_b), volts(adc_Rb_best, bits_b), volts(adc_Rb_max, bits_b)
     Vs_min, Vs_best, Vs_max = volts(adc_Rs_min, bits_s), volts(adc_Rs_best, bits_s), volts(adc_Rs_max, bits_s)
-    Rs_est_min = Vs_min * Rb / Vb_max
-    Rs_est_max = Vs_max * Rb / Vb_min
+    Rs_est_min = Vs_min * Rb / (adc_s.gain * Vb_max)
+    Rs_est_max = Vs_max * Rb / (adc_s.gain * Vb_min)
+    Rs_est_best = Vs_best * Rb / (adc_s.gain * Vb_best)
     offset = 0 if Rs_est_min == 0 else (100 * (Rs_est_max - Rs_est_min) / Rs_est_min)
     offset += Rb_accuracy
+    calc_offset = 100 * abs(Rs - Rs_est_best) / Rs
+    offset = max(offset, calc_offset)
+
+    # print(Rs, Rs_est_min, Rs_est_best, Rs_est_max, offset, calc_offset)
     Vb_noise = johnsonNoise(Rb, adc_b.odr)
     Vs_noise = johnsonNoise(Rs, adc_s.odr)
     eff_Vb_noise = Vb_noise**2 + adc_b.noise_rms**2
     eff_Vs_noise = Vs_noise**2 + adc_s.noise_rms**2
-    Vb_rv = NRV(Vb_best, variance=eff_Vb_noise)
-    Vs_rv = NRV(Vs_best, variance=eff_Vs_noise)
+    Vb_rv = normal_rvs.NRV(Vb_best, variance=eff_Vb_noise)
+    Vs_rv = normal_rvs.NRV(Vs_best, variance=eff_Vs_noise)
     Rs_noise = (Vs_rv * Rb) / Vb_rv
     noise = 100 * Rs_noise.standard_deviation / Rs
-    return offset, noise
+    params = {}
+    params['Vb_best'] = Vb_best
+    params['Vs_best'] = Vs_best
+    params['Rs_est'] = Rs_est_best
+    return offset, noise, params
 
 
-def runAD7177Test(Rs_range, Vin, Vref, odr=5, N=1e4, target_accuracy_percent=0.015, critical_accuracy_percent=0.1, noise_limit_percent=0.005, NPLC=10):
-    N_min_samples = 1
+# TODO: CALCULATE UNDERFLOW ERROR WHEN THE SAMPLES ARE BELOW THE ENOB BITS....
+def runAD7177Test(Rs_range, Vin, Vref, odr=5, N=1e5, target_accuracy_percent=0.015, critical_accuracy_percent=0.1, noise_limit_percent=0.01, NPLC=1):
     ch_b = adc_models.AD7177Channel(Vref)
     ch_s = adc_models.AD7177Channel(Vref)
     ch_b.odr = odr
     ch_s.odr = odr
+    ch_s.gain = 4
+    print('Vref = {}'.format(ch_b.Vref))
+
+    N_min_samples = 5
+    N_per_plc = int(max(1, ch_b.odr / 60))
+    N_samples = max(N_min_samples, NPLC * N_per_plc)
+    NPLC = int(math.ceil((N_samples + 4) * 60 / ch_b.odr))  # Note: four more samples to set up the 5-point delta offset correction
 
     Rss = np.linspace(Rs_range[0], Rs_range[1], int(N))
     dRs = []
     noises = []
     idx_start = None
     idx_end = None
+    Vbs = []
+    Vss = []
     for idx, Rs in enumerate(Rss):
-        dR, noise = calcResistorMeasurementAccuracy(Vin, Vref, Rs, Rb, ch_b, ch_s, Re=1.5)
+        dR, noise, params = calcResistorMeasurementAccuracy(Vin, Rs, Rb, ch_b, ch_s, Re=1.5, N=N_samples)
         dRs.append(dR)
+        Vbs.append(params['Vb_best'])
+        Vss.append(params['Vs_best'])
         noises.append(noise)
         if idx_start is None:
             if dR < critical_accuracy_percent:
@@ -89,13 +114,12 @@ def runAD7177Test(Rs_range, Vin, Vref, odr=5, N=1e4, target_accuracy_percent=0.0
                 idx_end = idx
     idx_start = 0 if idx_start is None else idx_start
     idx_end = -1 if idx_end is None else idx_end
-    fig, axs = plt.subplots(2, figsize=(16, 9))
-    N_per_plc = int(max(1, ch_b.odr / 60))
-    N_samples = max(N_min_samples, NPLC * N_per_plc)
-    NPLC = int(math.ceil((N_samples + 2) * 60 / ch_b.odr))  # Note: two more samples to set up the delta offset correction
+    fig, axs = plt.subplots(3, figsize=(16, 9))
 
     axs[0].set_title('Offset Error (% of measuement) -- ENOB = {:0.1f}'.format(ch_b.noise_free_bits))
     axs[1].set_title('Calculation Noise (% of measurement) -- ODR = {:0.2f} Hz, NPLC = {}, Samples = {}'.format(ch_b.odr, NPLC, N_samples))
+    axs[2].set_title('Measured Voltages')
+
     sns.lineplot(x=Rss[idx_start:idx_end], y=dRs[idx_start:idx_end], ax=axs[0])
     axs[0].axhspan(0, target_accuracy_percent, fc='g', alpha=0.1)
     ymax = min(critical_accuracy_percent, axs[0].get_ylim()[1])
@@ -133,28 +157,26 @@ def runAD7177Test(Rs_range, Vin, Vref, odr=5, N=1e4, target_accuracy_percent=0.0
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
         )
 
+    sns.lineplot(x=Rss[idx_start:idx_end], y=Vbs[idx_start:idx_end], label='Vb', ax=axs[2])
+    sns.lineplot(x=Rss[idx_start:idx_end], y=Vss[idx_start:idx_end], label='Vs', ax=axs[2])
+    axs[2].set_ylim(0, ch_b.Vfs[1].mean)
     fig.tight_layout()
     plt.show()
 
 
 if __name__ == '__main__':
-    Vref = 5
-    Rs_range = (1e-4, 1)
-    # ad7177_ch0 = adc_models.AD7177Channel(Vref)
-    # ad7177_ch1 = adc_models.AD7177Channel(Vref)
-    # ad7177_ch0.odr = 200
-    # ad7177_ch1.odr = 200
-    # print('noise_bits = {}'.format(ad7177_ch0.noise_bits))
-    # print('noise_free_bits = {}'.format(ad7177_ch0.noise_free_bits))
-    # print('enob = {}'.format(ad7177_ch0.enob))
-
+    Vref = normal_rvs.NRV(5, 2.85e-6/6)  # TODO: MAKE THIS A REFERENCE OBJECT WITH NOISE DENSITY SO THAT NOISE CAN BE CALCULATED
     Vin = 5
+    Rs_range = (1e-4, 1)
     Rb = 100
-    target_accuracy_percent = 0.0125
-    critical_accuracy_percent = 0.05
+    target_accuracy_percent = 0.025
+    critical_accuracy_percent = .1
+    NPLC = 1
+    odr = 500
     # N_min = calcMinimumCounts(target_accuracy_percent)
     # print('N_min = {} counts'.format(int(N_min)))
     # Rs_max = calcErrorLimitedResistance(Rb, bits=ad7177_ch0.enob, N_min=N_min, Re=10)
     # print('Rs_max = {} ohms'.format(Rs_max))
 
-    runAD7177Test(Rs_range, Vin, Vref, odr=16.67, target_accuracy_percent=target_accuracy_percent, critical_accuracy_percent=critical_accuracy_percent)
+
+    runAD7177Test(Rs_range, Vin, Vref, odr=odr, target_accuracy_percent=target_accuracy_percent, critical_accuracy_percent=critical_accuracy_percent, NPLC=NPLC)

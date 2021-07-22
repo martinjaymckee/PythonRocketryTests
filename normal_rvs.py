@@ -100,3 +100,6 @@ if __name__ == '__main__':
     print('N(0.5, {:g}) / N(1, {:g}) = {}'.format(vy, vx, half / one))
     print('1 * N(0.5, {:g}) = {}'.format(vy, 1 / half))
     print('N(0.5, {:g}) / 1 = {}'.format(vy, half / 1))
+
+    print('N(1, 0.5) / 10 = {}'.format(NRV(1, 0.5) / 10))
+    print('10 * N(1, 0.5) = {}'.format(10 * NRV(1, 0.5)))

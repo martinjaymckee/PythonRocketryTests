@@ -3,10 +3,36 @@ import random
 
 import numpy as np
 
+import normal_rvs
+
+
+def ppFromRMS(rms):
+    return math.sqrt(2) * rms
+
+
+def rmsFromPP(pp):
+    return pp / math.sqrt(2)
+
+
+def noiseFromSNR(Vref, SNR):
+    return Vref / (2**((SNR - 1.76) / 6.02))
+
+
+def noiseFromENOB(Vref, enob):
+    return Vref / 2**enob
+
+
+def enobFromSNR(SNR):
+    return (SNR - 1.76) / 6.02
+
+
+def snrFromENOB(enob):
+    return (6.02 * enob) + 1.76
+
 
 class ADCChannel(object):
     def __init__(self, V_ref, bits=12, Av_err=0.01, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
-        self.__V_ref = V_ref
+        self.__V_ref = normal_rvs.NRV.Construct(V_ref)
         self.__bits = bits
         self.__resolution = 2**bits
         self.__gain = random.gauss(1, Av_err/3)
@@ -20,14 +46,19 @@ class ADCChannel(object):
         return self.__V_ref
 
     @property
+    def Vfs(self):
+        return (-self.Vref, self.Vref)
+
+    @property
     def bits(self):
         return self.__bits
 
     @property
     def noise_free_bits(self):
-        if self.noise_pp == 0:
+        if (self.noise_pp == 0) and (self.Vref.varaince == 0):
             return self.bits
-        return math.log(self.Vref / self.noise_pp) / math.log(2)
+        Vnoise = math.sqrt(self.noise_pp**2 + self.Vref.variance)
+        return math.log(self.Vref / Vnoise) / math.log(2)
 
     @property
     def noise_bits(self):
@@ -35,9 +66,10 @@ class ADCChannel(object):
 
     @property
     def enob(self):
-        if self.noise_rms == 0:
+        if (self.noise_rms == 0) and (self.Vref.varaince == 0):
             return self.__bits
-        return math.log(self.Vref / self.noise_rms) / math.log(2)
+        Vnoise = math.sqrt(self.noise_rms**2 + self.Vref.variance)
+        return math.log(self.Vref / Vnoise) / math.log(2)
 
     @property
     def odr(self):
@@ -61,18 +93,24 @@ class ADCChannel(object):
 
     @property
     def noise_rms(self):
-        # Note: this should be overloaded based on odr, gain, etc...
         return 0.07e-6
 
     @property
     def noise_pp(self):
-        # Note: this should be overloaded based on odr, gain, etc...
-        return 0.32e-6
+        return 6 * self.noise_rms
 
-    def __call__(self, V):
-        V = min(self.__V_ref, max(0, V))
-        adc_noise = random.gauss(0, 2**self.__noise_bits/3)
+    def __call__(self, V, debug=False):
+        V = self.__clip_input(V)
+        adc_noise = random.gauss(0, self.noise_rms)
         return int(((self.__resolution-1) * V / self.__V_ref) + adc_noise)
+
+    def __clip_input(self, V):
+        Vmin, Vmax = self.Vfs
+        if V < Vmin:
+            return Vmin
+        elif V > Vmax:
+            return Vmax
+        return V
 
     def __find_nearest_index(self, val, options):
         return (np.abs(np.asarray(options) - val)).argmin()
@@ -105,6 +143,49 @@ class AD7177Channel(ADCChannel):
         }
         return noise[self.odr]
 
+
+class ADS1283Channel(ADCChannel):
+    odrs = [250, 500, 1000, 2000, 4000]
+    gains = [1, 2, 4, 8, 16, 32, 64]
+
+    def __init__(self, V_ref):
+        super().__init__(V_ref, bits=32, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
+
+    # Note: the noise is currently based on the chop bit being enabled
+    @property
+    def noise_rms(self):
+        noise = {
+            # 250 sps
+            (250, 1): 0.59, (250, 2): 0.6, (250, 4): 0.64, (250, 8): 0.8,
+            (250, 16): 1.12, (250, 32): 1.92, (250, 64): 3.84,
+            # 500 sps
+            (500, 1): 0.84, (500, 2): 0.86, (500, 4): 0.92, (500, 8): 1.12,
+            (500, 16): 1.44, (500, 32): 2.88, (500, 64): 5.12,
+            # 1000 sps
+            (1000, 1): 1.19, (1000, 2): 1.2, (1000, 4): 1.28, (1000, 8): 1.6,
+            (1000, 16): 2.08, (1000, 32): 3.84, (1000, 64): 7.04,
+            # 2000 sps
+            (2000, 1): 1.68, (2000, 2): 1.72, (2000, 4): 1.84, (2000, 8): 2.24,
+            (2000, 16): 2.88, (2000, 32): 5.44, (2000, 64): 10.24,
+            # 4000 sps
+            (4000, 1): 2.4, (4000, 2): 2.44, (4000, 4): 2.64, (4000, 8): 3.2,
+            (4000, 16): 4.16, (4000, 32): 8, (4000, 64): 14.72
+        }
+        return noise[(self.odr, self.gain)]
+
+
 if __name__ == '__main__':
     ch = AD7177Channel(2.5)
     ch.odr = 500
+
+    noise = noiseFromSNR(5, 154)
+    print('Given a Vref of 5v and SNR of 154 dB, the noise level is {:0.3g} uV'.format(1e6*noise))
+
+    noise = noiseFromENOB(5, 26.7)
+    print('Given a Vref of 5v and ENOB of 26.7, the noise level is {:0.3g} uV'.format(1e6*noise))
+
+    ch = ADS1283Channel(2.5)
+    ch.odr = 2000
+    ch.gain = 32
+
+    print('ADS1283(odr = {}, gain = {}) noise_rms = {}, noise_pp = {}'.format(ch.odr, ch.gain, ch.noise_rms, ch.noise_pp))

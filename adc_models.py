@@ -60,6 +60,10 @@ class ADCChannel(object):
         return self.__is_signed
 
     @property
+    def simultaneous(self):
+        return False
+
+    @property
     def bits(self):
         return self.__bits
 

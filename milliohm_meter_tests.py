@@ -149,11 +149,27 @@ def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vs
     return fig, axs
 
 
-def sampleAndNPLCEstimation(odr, NPLC, N_min_samples=5, N_additional_samples=4):
-    N_per_plc = int(max(1, odr / 60))
+def sampleAndNPLCEstimation(odr, NPLC, simultaneous=False, N_min_samples=5, N_additional_samples=4, f_line=60, cycle_accuracy=0.025):
+    def minNPLCs():
+        samplesPerNPLC = odr / f_line
+        # print('Samples per NPLC = {}'.format(samplesPerNPLC))
+        NPLC_min = 1
+        while (1 - int(NPLC_min * samplesPerNPLC) / (NPLC_min * samplesPerNPLC)) > cycle_accuracy:
+            NPLC_min += 1
+        return NPLC_min, int(NPLC_min * samplesPerNPLC)
+    NPLC_min, N_samples_min = minNPLCs()
+    N_per_plc = int(max(1, odr / f_line))
     N_samples = max(N_min_samples, NPLC * N_per_plc)
-    NPLC = int(math.ceil((N_samples + N_additional_samples) * 60 / odr))
-    return N_samples, NPLC
+    N_samples_total = N_samples + N_additional_samples
+    if not simultaneous:
+        N_samples_total *= 2
+    ratio = math.ceil(N_samples_total) / N_samples_min
+    NPLC = int(ratio * NPLC_min)
+    N_samples = (ratio * N_samples_min)
+    if not simultaneous:
+        N_samples /= 2
+    N_samples -= N_additional_samples
+    return int(N_samples), NPLC
 
 
 # TODO: CREATE MORE FUNCTIONS TO MAKE THIS EASIER TO BUILD DIFFERENT TESTS
@@ -164,7 +180,7 @@ def runAD7177Test(Rs_range, Vin, Vref, odr=5, N=1e3, target_accuracy_percent=0.0
     ch_b.odr = odr
     ch_s.odr = odr
     print('AD7177 ODR = {} sps'.format(ch_b.odr))
-    N_samples, NPLC = sampleAndNPLCEstimation(ch_b.odr, NPLC, N_min_samples=5)
+    N_samples, NPLC = sampleAndNPLCEstimation(ch_b.odr, NPLC, simultaneous=ch_b.simultaneous, N_min_samples=5)
     print('\tNPLC = {}, Samples = {} per channel'.format(NPLC, N_samples))
     print('\tSampling Time = {} s'.format(NPLC/60))
 
@@ -227,7 +243,7 @@ def runADS1283Test(Rs_range, Vin, Vref, odr=5, N=1e3, target_accuracy_percent=0.
     ch_b.odr = odr
     ch_s.odr = odr
     print('ADS1283 ODR = {} sps'.format(ch_b.odr))
-    N_samples, NPLC = sampleAndNPLCEstimation(ch_b.odr, NPLC, N_min_samples=5)
+    N_samples, NPLC = sampleAndNPLCEstimation(ch_b.odr, NPLC, simultaneous=ch_b.simultaneous, N_min_samples=5)
     print('\tNPLC = {}, Samples = {} per channel'.format(NPLC, N_samples))
     print('\tSampling Time = {} s'.format(NPLC/60))
 
@@ -290,13 +306,13 @@ if __name__ == '__main__':
     Vin = 5
     # Rs_range = (0.01, 15)
     Rs_range = (0.01, 1e4)
-    N = 1e6
+    N = 1e3
     Rb = 100
     noise_limit_percent = 0.01
     target_accuracy_percent = 0.015
     critical_accuracy_percent = 0.1
-    NPLC = 60
-    odr = 250
+    NPLC = 10
+    odr = 5
     voltages_fig, voltages_axs = plt.subplots(2, figsize=(16, 9))
     voltages_axs[0].set_title('Vb Measurements')
     voltages_axs[1].set_title('Vs Measurements')
@@ -332,4 +348,4 @@ if __name__ == '__main__':
         plot_adc_voltages=(voltages_fig, voltages_axs)
     )
 
-    plt.show()
+    # plt.show()

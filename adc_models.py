@@ -31,7 +31,8 @@ def snrFromENOB(enob):
 
 
 class ADCChannel(object):
-    def __init__(self, V_ref, bits=12, Av_err=0.01, is_signed=False, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
+    def __init__(self, name, V_ref, bits=12, Av_err=0.01, is_signed=False, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
+        self.__name = name
         self.__V_ref = normal_rvs.NRV.Construct(V_ref)
         self.__bits = bits
         self.__resolution = 2**bits
@@ -41,6 +42,25 @@ class ADCChannel(object):
         self.__odr_idx = 0
         self.__gains = gains
         self.__gain_idx = 0
+
+    def __str__(self):
+        gain = self.gain
+        if gain > 1:
+            return '{} (Vref = {} v, odr = {} sps, gain = {})'.format(
+                        self.name,
+                        normal_rvs.mean(self.Vref),
+                        self.odr,
+                        self.gain
+                    )
+        return '{} (Vref = {} v, odr = {} sps)'.format(
+                    self.name,
+                    normal_rvs.mean(self.Vref),
+                    self.odr
+                )
+
+    @property
+    def name(self):
+        return self.__name
 
     @property
     def Vref(self):
@@ -153,7 +173,7 @@ class AD7177Channel(ADCChannel):
     odrs = [5, 10, 16.66, 20, 49.96, 59.92, 100, 200, 397.5, 500, 1000, 2500, 5000, 10000]
 
     def __init__(self, V_ref):
-        super().__init__(V_ref, bits=32, Av_err=0.01, odrs=AD7177Channel.odrs)
+        super().__init__('AD7177', V_ref, bits=32, Av_err=0.01, odrs=AD7177Channel.odrs)
 
     # Note: the noise is currently based on using the Sinc5 + Sinc1 filter and input buffers
     @property
@@ -182,7 +202,7 @@ class ADS1283Channel(ADCChannel):
     gains = [1, 2, 4, 8, 16, 32, 64]
 
     def __init__(self, V_ref):
-        super().__init__(V_ref, bits=32, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
+        super().__init__('ADS1283', V_ref, bits=32, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
 
     @property
     def Vfs(self):
@@ -226,4 +246,8 @@ if __name__ == '__main__':
     ch.odr = 2000
     ch.gain = 32
 
-    print('ADS1283(odr = {}, gain = {}) noise_rms = {}, noise_pp = {}'.format(ch.odr, ch.gain, ch.noise_rms, ch.noise_pp))
+    print('{} noise_rms = {}, noise_pp = {}'.format(ch, ch.noise_rms, ch.noise_pp))
+
+    print(ch)
+    ch.gain = 1
+    print(ch)

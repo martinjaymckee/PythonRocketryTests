@@ -31,10 +31,11 @@ def snrFromENOB(enob):
 
 
 class ADCChannel(object):
-    def __init__(self, V_ref, bits=12, Av_err=0.01, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
+    def __init__(self, V_ref, bits=12, Av_err=0.01, is_signed=False, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
         self.__V_ref = normal_rvs.NRV.Construct(V_ref)
         self.__bits = bits
         self.__resolution = 2**bits
+        self.__is_signed = is_signed
         self.__gain = random.gauss(1, Av_err/3)
         self.__odrs = odrs
         self.__odr_idx = 0
@@ -47,7 +48,16 @@ class ADCChannel(object):
 
     @property
     def Vfs(self):
-        return (-self.Vref, self.Vref)
+        return (-normal_rvs.mean(self.Vref), normal_rvs.mean(self.Vref))
+
+    @property
+    def Vres(self):
+        Vmin, Vmax = self.Vfs
+        return (Vmax - Vmin) / (2**self.enob)
+
+    @property
+    def signed(self):
+        return self.__is_signed
 
     @property
     def bits(self):
@@ -83,6 +93,10 @@ class ADCChannel(object):
     # TODO: ADD SOME FORM OF BANDWIDTH ADJUST TO THE ADC???
 
     @property
+    def gains(self):
+        return self.__gains[:]
+
+    @property
     def gain(self):
         return self.__gains[self.__gain_idx]
 
@@ -99,7 +113,16 @@ class ADCChannel(object):
     def noise_pp(self):
         return 6 * self.noise_rms
 
+    def quantitization_error(self, V):
+        Vres = self.Vres
+        return 100 * Vres / V
+
     def __call__(self, V, debug=False):
+        """
+        Eventually this needs to return a normal random variable with the mean being the best
+        adc count value and a variance based on the adc noise.  Then, simply converting the
+        return value to an int will give a valid sample.
+        """
         V = self.__clip_input(V)
         adc_noise = random.gauss(0, self.noise_rms)
         return int(((self.__resolution-1) * V / self.__V_ref) + adc_noise)
@@ -114,6 +137,12 @@ class ADCChannel(object):
 
     def __find_nearest_index(self, val, options):
         return (np.abs(np.asarray(options) - val)).argmin()
+
+    def __clip_counts(self, counts):
+        """This is currently assuming that the value is unsigned.  It needs to be changed to
+        work with differential input ADCs.
+        """
+        return min(counts, 2**self.bits)
 
 
 class AD7177Channel(ADCChannel):
@@ -151,6 +180,11 @@ class ADS1283Channel(ADCChannel):
     def __init__(self, V_ref):
         super().__init__(V_ref, bits=32, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
 
+    @property
+    def Vfs(self):
+        Vmag = normal_rvs.mean(self.Vref / (2 * self.gain))
+        return (-Vmag, Vmag)
+
     # Note: the noise is currently based on the chop bit being enabled
     @property
     def noise_rms(self):
@@ -171,7 +205,7 @@ class ADS1283Channel(ADCChannel):
             (4000, 1): 2.4, (4000, 2): 2.44, (4000, 4): 2.64, (4000, 8): 3.2,
             (4000, 16): 4.16, (4000, 32): 8, (4000, 64): 14.72
         }
-        return noise[(self.odr, self.gain)]
+        return noise[(self.odr, self.gain)] * 1e-6
 
 
 if __name__ == '__main__':

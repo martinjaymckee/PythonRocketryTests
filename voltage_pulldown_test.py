@@ -140,17 +140,19 @@ if __name__ == '__main__':
     #     'voltage_pulldown_data_6.csv'
     # ]
     filenames = [
-        'voltage_pulldown_data_5.csv'
+        'voltage_pulldown_data_7.csv'
     ]
     plotVoltagePulldownTests(filenames)
     plt.show()
 
     filenames = [
         ('voltage_pulldown_data_1.csv', 1),
-        ('voltage_pulldown_data_2.csv', 0.5)
+        ('voltage_pulldown_data_2.csv', 0.5),
+        ('voltage_pulldown_data_7.csv', 0.5)
     ]
 
     for (filename, Rl) in filenames:
+        print('filename = {}, R1 = {}'.format(filename, Rl))
         with open(filename, 'r') as file:
             ts, firing, Vbats, Vmcus, Vpyros, vars = parseVoltagePulldownData(file)
             Rs, Il = estimateSourceResistance(Vpyros, Rl)

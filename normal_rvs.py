@@ -1,6 +1,8 @@
 import math
 import random
 
+import numpy as np
+
 
 class NormalRandomVariable:
     @classmethod
@@ -29,11 +31,18 @@ class NormalRandomVariable:
     def standard_deviation(self):
         return math.sqrt(self.__variance)
 
+    def sample(self, N, dtype=float):
+        samples = [dtype(self) for _ in range(N)]
+        return np.array(samples)
+
     def __str__(self):
         return 'N({:g}, {:g})'.format(self.__mean, self.__variance)
 
     def __float__(self):
         return float(random.gauss(self.mean, self.standard_deviation))
+
+    def __int__(self):
+        return int(random.gauss(self.mean, self.standard_deviation))
 
     def __neg__(self):
         return self.__class__(mean=-self.__mean, variance=self.__variance)
@@ -59,6 +68,7 @@ class NormalRandomVariable:
         mx, my = self.__mean, other.mean
         vx, vy = self.__variance, other.variance
         new_mean = mx * my
+        # print('mx = {}, my = {}, vx = {}, vy = {}'.format(mx, my, vx, vy))
         new_variance = ((vx + mx**2)*(vy + my**2)) - (mx**2 * my**2)
         return self.__class__(mean=new_mean, variance=new_variance)
 
@@ -81,7 +91,34 @@ class NormalRandomVariable:
 NRV = NormalRandomVariable
 
 
+def mean(val):
+    if isinstance(val, NormalRandomVariable):
+        return val.mean
+    return val
+
+
+def variance(val):
+    if isinstance(val, NormalRandomVariable):
+        return val.variance
+    return 0
+
+
+def standard_deviation(val):
+    if isinstance(val, NormalRandomVariable):
+        return val.standard_deviation
+    return 0
+
+
+def abs(val):
+    if isinstance(val, NormalRandomVariable):
+        val = val.mean
+    return abs(val)
+
+
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
     vx, vy = 0.1, 0.15
     one = NRV(mean=1, variance=vx)
     half = NRV(mean=0.5, variance=vy)
@@ -103,3 +140,9 @@ if __name__ == '__main__':
 
     print('N(1, 0.5) / 10 = {}'.format(NRV(1, 0.5) / 10))
     print('10 * N(1, 0.5) = {}'.format(10 * NRV(1, 0.5)))
+
+    onehundred = NRV(mean=100, variance=100)
+    samples = onehundred.sample(10000, dtype=int)
+
+    sns.distplot(samples)
+    plt.show()

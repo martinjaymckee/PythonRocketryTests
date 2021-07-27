@@ -11,13 +11,14 @@ import normal_rvs
 
 
 class MilliohmMeterConstraints:
-    def __init__(self, target_accuracy=0.01, critical_accuracy=0.1, noise_limit=0.01, **kwargs):
+    def __init__(self, target_accuracy=0.015, critical_accuracy=0.1, noise_limit=0.01, **kwargs):
         self.__target_accuracy = target_accuracy
         self.__critical_accuracy = critical_accuracy
         self.__noise_limit = noise_limit
-
-        if len(kwargs) > 0:
-            print('Unused Milliohm Meter Constraints: {}'.format(kwargs))
+        if not len(kwargs) == 0:
+            classname = self.__class__.__name__
+            keys = '{}'.format(', '.join(list(kwargs.keys())))
+            assert False, 'Error: Unused keyword arguments in {} -- {}'.format(classname, keys)
 
     @property
     def target_accuracy(self):
@@ -32,10 +33,12 @@ class MilliohmMeterConstraints:
         return self.__noise_limit
 
 
+# TODO: DECIDE IF THIS SHOULD STAY?
 def calcMinimumCounts(accuracy, oversampling=5):
     return oversampling * (100 / accuracy)
 
 
+# TODO: DECIDE IF THIS SHOULD STAY?
 def calcErrorLimitedResistance(Rb, bits=10, N_min=None, Re=0):
     N_min = (2**bits) / 10 if N_min is None else N_min
     return ((2**bits) / N_min) * (Rb - ((N_min/(2**bits))*(Rb+Re)))
@@ -51,63 +54,32 @@ def oversamplingBits(N):
     return math.log(N) / math.log(4)
 
 
-def calcResistorMeasurementAccuracy(Vin, Rs, Rb, adc_b, adc_s, Re=0, Rb_accuracy=0.01, BW=50, N=1, oversampling=False):
-    def volts(adc, bits):
-        """
-        This is something of a hack and should be removed with the functionality moving
-        to the ADCChannel base class.  Additionally, the adcCounts function should become
-        the proper implementation of the __call__ method for an ADCClass
-        """
-        return adc_b.Vfs[1] * adc / 2**bits
-
-    def adcCounts(gain, V, bits):
-        def clipADC(counts):
-            return min(counts, 2**bits)
-        minimum = clipADC(math.floor(gain * (2**bits) * V / adc_b.Vref.mean))
-        maximum = clipADC(minimum + 1)
-        best = clipADC(int((gain * (2**bits) * V / adc_b.Vref.mean) + 0.5))
-        return minimum, best, maximum
-
-    def Itest_est(Vb):
-        return Vb / Rb
-
-    def Rs_est(gain, Vs, Itest):
-        return Vs / (gain * Itest)
+def calcResistorMeasurementAccuracy(Vin, Rs, Rb, adc_b, adc_s, Re=0, Rb_accuracy=0.01, BW=None, N=1, oversampling=False):
+    BW_b = adc_b.odr / 2 if BW is None else BW
+    BW_s = adc_s.odr / 2 if BW is None else BW
 
     I_test = Vin / (Rb + Rs + Re)
-    Vb = Rb * I_test
-    Vs = Rs * I_test
-    bits_os = 0 if not oversampling else oversamplingBits(N)
-    bits_b, bits_s = adc_b.enob + bits_os, adc_s.enob + bits_os
-    adc_Rb_min, adc_Rb_best, adc_Rb_max = adcCounts(adc_b.gain, Vb, bits_b)
-    adc_Rs_min, adc_Rs_best, adc_Rs_max = adcCounts(adc_s.gain, Vs, bits_s)
-    Vb_min, Vb_best, Vb_max = volts(adc_Rb_min, bits_b), volts(adc_Rb_best, bits_b), volts(adc_Rb_max, bits_b)
-    Vs_min, Vs_best, Vs_max = volts(adc_Rs_min, bits_s), volts(adc_Rs_best, bits_s), volts(adc_Rs_max, bits_s)
-    Rs_est_min = adc_b.gain * Vs_min * Rb / (adc_s.gain * Vb_max)
-    Rs_est_max = adc_b.gain * Vs_max * Rb / (adc_s.gain * Vb_min)
-    Rs_est_best = adc_b.gain * Vs_best * Rb / (adc_s.gain * Vb_best)
-    # print('adc_Rb_best = {}, adc_Rs_best = {}'.format(adc_Rb_best, adc_Rs_best))
-    # print('Vs_best = {}, Rb = {}, Vb_best = {}'.format(Vs_best, Rb, Vb_best))
-    # print('Rs_est_best = {}'.format(Rs_est_best))
-    offset = 0 if Rs_est_min == 0 else (100 * (Rs_est_max - Rs_est_min) / Rs_est_min)/2
-    offset += Rb_accuracy
-    calc_offset = 100 * abs(Rs - Rs_est_best) / Rs
-    offset = max(offset, calc_offset)
 
-    # print(Rs, Rs_est_min, Rs_est_best, Rs_est_max, offset, calc_offset)
-    Vb_noise = johnsonNoise(Rb, adc_b.odr)
-    Vs_noise = johnsonNoise(Rs, adc_s.odr)
-    eff_Vb_noise = Vb_noise**2 + adc_b.noise_rms**2
-    eff_Vs_noise = Vs_noise**2 + adc_s.noise_rms**2
-    Vb_rv = normal_rvs.NRV(Vb_best, variance=eff_Vb_noise)
-    Vs_rv = normal_rvs.NRV(Vs_best, variance=eff_Vs_noise)
-    # print('Vs_min = {}, Vs_best = {}, Vs_max = {}'.format(Vs_min, Vs_best, Vs_max))
-    # print('Vs_Rv = {}, Rb = {}, Vb_rv = {}'.format(Vs_rv, Rb, Vb_rv))
-    Rs_noise = (Vs_rv * Rb) / Vb_rv
-    noise = 100 * Rs_noise.standard_deviation / Rs
+    effective_samples = 1 if not oversampling else N
+    Vb = normal_rvs.NRV(Rb * I_test, johnsonNoise(Rb, BW_b))
+    Vs = normal_rvs.NRV(Rs * I_test, johnsonNoise(Rs, BW_s))
+
+    Vb_rv, data_b = adc_b(Vb, return_type='voltage_rti', full=True, samples=effective_samples)
+    Vs_rv, data_s = adc_s(Vs, return_type='voltage_rti', full=True, samples=effective_samples)
+    # print('Vb = {}, Vb_rv = {}'.format(Vb, Vb_rv))
+    Rs_est_min = data_s['v_rti_min'] * Rb / data_b['v_rti_max']
+    Rs_est_max = data_s['v_rti_max'] * Rb / data_b['v_rti_min']
+    Rs_est_best = Vs_rv * Rb / Vb_rv
+
+    offset = 0 if Rs_est_min == 0 else normal_rvs.mean(50 * (Rs_est_max - Rs_est_min) / Rs_est_min)
+    offset += Rb_accuracy
+
+    noise = 100 * normal_rvs.standard_deviation(Rs_est_best) / Rs
     params = {}
-    params['Vb_best'] = Vb_best
-    params['Vs_best'] = Vs_best
+    params['Vb_best'] = normal_rvs.mean(Vb_rv)
+    params['Vs_best'] = normal_rvs.mean(Vs_rv)
+    params['Vb_adc'] = normal_rvs.mean(data_b['v_adc'])
+    params['Vs_adc'] = normal_rvs.mean(data_s['v_adc'])
     params['Rs_est'] = Rs_est_best
     return offset, noise, params
 
@@ -206,10 +178,9 @@ def runMilliohmMeterTest(Rs_range, Vin, Vref, ADCType, odr=5, N=1e3, NPLC=1, con
         best_gain = None
         for gain in ch.gains:
             ch.gain = gain
-            if Vtest > ch.Vfs[1]: break  # Exit if the measurement is not within range
+            if Vtest >= ch.Vfs[1]: break  # Exit if the measurement is not within range
             Vres = ch.Vres
             Vnoise = ch.noise_rms / math.sqrt(N_samples)
-
             if (best_gain is None) or (Vnoise < Vres):
                 best_gain = gain
         return best_gain
@@ -234,16 +205,17 @@ def runMilliohmMeterTest(Rs_range, Vin, Vref, ADCType, odr=5, N=1e3, NPLC=1, con
     gains_s = []
     for idx, Rs in enumerate(Rss):
         Itest = Vin / (Rb + Rs + Re)
-        gain_b = getBestGain(ch_b, Rb, Itest, N_samples)
-        ch_b.gain = gain_b
-        gains_b.append(gain_b)
-        gain_s = getBestGain(ch_s, Rs, Itest, N_samples)
-        ch_s.gain = gain_s
-        gains_s.append(gain_s)
+        if len(ch_b.gains) > 1:
+            gain_b = getBestGain(ch_b, Rb, Itest, N_samples)
+            ch_b.gain = gain_b
+            gains_b.append(gain_b)
+            gain_s = getBestGain(ch_s, Rs, Itest, N_samples)
+            ch_s.gain = gain_s
+            gains_s.append(gain_s)
         dR, noise, params = calcResistorMeasurementAccuracy(Vin, Rs, Rb, ch_b, ch_s, Re=Re, N=N_samples)
         dRs.append(dR)
-        Vbs.append(params['Vb_best'])
-        Vss.append(params['Vs_best'])
+        Vbs.append(params['Vb_adc'])
+        Vss.append(params['Vs_adc'])
         noises.append(noise)
         if idx_start is None:
             if dR < constraints.critical_accuracy:
@@ -261,11 +233,12 @@ def runMilliohmMeterTest(Rs_range, Vin, Vref, ADCType, odr=5, N=1e3, NPLC=1, con
         v_fig, v_axs = kwargs['plot_adc_voltages']
         plotADCVoltages(v_fig, v_axs, Rss, Vbs, Vss, Vref, model=ch_b.name)
 
-    gain_fig, gain_ax = plt.subplots(1, figsize=(16, 9))
-    gain_fig.suptitle('Optimal gain settings for {}'.format(ch_b.name))
-    sns.lineplot(x=Rss, y=gains_b, label='Rb gain', ax=gain_ax)
-    sns.lineplot(x=Rss, y=gains_s, label='Rs gain', ax=gain_ax)
-    gain_fig.tight_layout()
+    if len(ch_b.gains) > 1:
+        gain_fig, gain_ax = plt.subplots(1, figsize=(16, 9))
+        gain_fig.suptitle('Optimal gain settings for {}'.format(ch_b.name))
+        sns.lineplot(x=Rss, y=gains_b, label='Rb gain', ax=gain_ax)
+        sns.lineplot(x=Rss, y=gains_s, label='Rs gain', ax=gain_ax)
+        gain_fig.tight_layout()
 
     data = {
         'Rss': Rss,
@@ -286,24 +259,26 @@ def runADS1283Test(Rs_range, Vin, Vref, odr=5, N=1e3, NPLC=1, constraints=None, 
 
 
 if __name__ == '__main__':
-    Vref = normal_rvs.NRV(5, 2.85e-6/6)  # TODO: MAKE THIS A REFERENCE OBJECT WITH NOISE DENSITY SO THAT NOISE CAN BE CALCULATED
+    Vref = normal_rvs.NRV(5, 2.85e-6/6)
+    print('Vref = {}'.format(Vref))
     Vin = 5
-    # Rs_range = (0.01, 15)
-    Rs_range = (0.01, 1e4)
-    N = 1e3
+    Rs_range = (0.001, 1)
+    # Rs_range = (0.001, 15)
+    # Rs_range = (0.001, 1e4)
+    N = 1e4
     Rb = 100
 
     constraints = MilliohmMeterConstraints(
-        noise_limit_percent=0.01,
-        target_accuracy_percent=0.015,
-        critical_accuracy_percent=0.1
+        noise_limit=0.01,
+        target_accuracy=0.015,
+        critical_accuracy=0.1
     )
 
     NPLC = 10
-    odr = 5
+    odr = 250
     voltages_fig, voltages_axs = plt.subplots(2, figsize=(16, 9))
-    voltages_axs[0].set_title('Vb Measurements')
-    voltages_axs[1].set_title('Vs Measurements')
+    voltages_axs[0].set_title('Vb_adc Measurements')
+    voltages_axs[1].set_title('Vs_adc Measurements')
     # N_min = calcMinimumCounts(target_accuracy_percent)
     # print('N_min = {} counts'.format(int(N_min)))
     # Rs_max = calcErrorLimitedResistance(Rb, bits=ad7177_ch0.enob, N_min=N_min, Re=10)
@@ -316,9 +291,6 @@ if __name__ == '__main__':
         odr=odr,
         N=N,
         constraints=constraints,
-        # target_accuracy_percent=target_accuracy_percent,
-        # critical_accuracy_percent=critical_accuracy_percent,
-        # noise_limit_percent=noise_limit_percent,
         NPLC=NPLC,
         plot_adc_voltages=(voltages_fig, voltages_axs)
     )
@@ -331,11 +303,40 @@ if __name__ == '__main__':
         odr=odr,
         N=N,
         constraints=constraints,
-        # target_accuracy_percent=target_accuracy_percent,
-        # critical_accuracy_percent=critical_accuracy_percent,
-        # noise_limit_percent=noise_limit_percent,
         NPLC=NPLC,
         plot_adc_voltages=(voltages_fig, voltages_axs)
     )
 
     plt.show()
+
+    # Vin = 2.5
+    # odr = 250
+    # Rs = 0.1
+    # Rb = 100
+    # ch_b = adc_models.ADS1283Channel(Vref)
+    # ch_s = adc_models.ADS1283Channel(Vref)
+    # ch_b.odr = odr
+    # ch_s.odr = odr
+    # ch_s.gain = 64
+    # N = 100
+    # dR, noise, data = calcResistorMeasurementAccuracy(Vin, Rs, Rb, ch_b, ch_s, Re=1.5, BW=odr/2, N=N, oversampling=False)
+    # print('dR = {:0.6f} %, noise = {:0.4f} %'.format(dR, noise))
+    # # print('data = {}'.format(data))
+    # for key, value in data.items():
+    #     print('\t{}: {}'.format(key, value))
+    #
+    # Vin = 2.5
+    # odr = 250
+    # Rs = 0.1
+    # Rb = 100
+    # ch_b = adc_models.ADS1283Channel(Vref)
+    # ch_s = adc_models.ADS1283Channel(Vref)
+    # ch_b.odr = odr
+    # ch_s.odr = odr
+    # ch_s.gain = 8
+    # N = 100
+    # dR, noise, data = calcResistorMeasurementAccuracy(Vin, Rs, Rb, ch_b, ch_s, Re=1.5, BW=odr/2, N=N, oversampling=False)
+    # print('dR = {:0.6f} %, noise = {:0.4f} %'.format(dR, noise))
+    # # print('data = {}'.format(data))
+    # for key, value in data.items():
+    #     print('\t{}: {}'.format(key, value))

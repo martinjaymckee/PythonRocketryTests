@@ -31,7 +31,7 @@ def snrFromENOB(enob):
 
 
 class ADCChannel(object):
-    def __init__(self, name, V_ref, bits=12, Av_err=0.01, is_signed=False, Voffset=None, odrs=[100], gains=[1, 2, 4, 8, 16, 32, 64]):
+    def __init__(self, name, V_ref, bits=10, Av_err=0.01, is_signed=False, Voffset=None, odrs=[100], gains=[1]):
         self.__name = name
         self.__V_ref = normal_rvs.NRV.Construct(V_ref)
         self.__bits = bits
@@ -68,7 +68,16 @@ class ADCChannel(object):
 
     @property
     def Vfs(self):
-        return (-normal_rvs.mean(self.Vref), normal_rvs.mean(self.Vref))
+        Vmag = self.Vref / self.gain
+        if self.signed:
+            return (-Vmag, Vmag)
+        return (normal_rvs.NRV(0), Vmag)
+
+    @property
+    def Vadc(self):
+        if self.signed:
+            return (-self.Vref, self.Vref)
+        return (normal_rvs.NRV(0), self.Vref)
 
     @property
     def Vres(self):
@@ -131,7 +140,7 @@ class ADCChannel(object):
 
     @property
     def noise_rms(self):
-        return 0.07e-6
+        return 2.5e-3
 
     @property
     def noise_pp(self):
@@ -141,23 +150,50 @@ class ADCChannel(object):
         Vres = self.Vres
         return 100 * Vres / V
 
-    def __call__(self, V, debug=False):
+    def __call__(self, V, return_type='counts', full=False, samples=1):
         """
         Eventually this needs to return a normal random variable with the mean being the best
         adc count value and a variance based on the adc noise.  Then, simply converting the
         return value to an int will give a valid sample.
         """
-        V = self.__clip_input(V)
-        adc_noise = random.gauss(0, self.noise_rms)
-        return int(((self.__resolution-1) * V / self.__V_ref) + adc_noise)
+        data = {}
+        adc_noise = normal_rvs.NRV.Noise(sd=self.noise_rms)
+        V = self.__clip_input(self.gain*V + adc_noise)
+        V = normal_rvs.oversample(V, samples)
+        adc_intermediate = self.__convert_adc(V)
+        return_value = None
+        if return_type == 'counts':
+            return_value = normal_rvs.NRV(
+                self.__clip_counts(int(adc_intermediate.mean + 0.5)),
+                int(adc_intermediate.standard_deviation),
+                dtype=int
+            )
+        elif return_type == 'voltage_adc':
+            return_value = self.__calc_v_adc(adc_intermediate)
+        elif return_type == 'voltage_rti':
+            return_value = self.__calc_v_rti(adc_intermediate)
+        if full:
+            data['adc_min'] = normal_rvs.NRV(int(math.floor(adc_intermediate.mean)), int(adc_intermediate.standard_deviation))
+            bits_os = math.log(samples) / math.log(4)
+            data['adc_enob_step'] = 2**(self.bits - self.enob - bits_os)
+            data['adc_max'] = normal_rvs.NRV(int(math.ceil(adc_intermediate.mean + data['adc_enob_step'])), int(adc_intermediate.standard_deviation))
+            data['v_adc_min'] = self.__calc_v_adc(data['adc_min'])
+            data['v_adc'] = self.__calc_v_adc(adc_intermediate)
+            data['v_adc_max'] = self.__calc_v_adc(data['adc_max'])
+            data['v_rti_min'] = self.__calc_v_rti(data['adc_min'])
+            data['v_rti'] = self.__calc_v_rti(adc_intermediate)
+            data['v_rti_max'] = self.__calc_v_rti(data['adc_max'])
+            return return_value, data
+        return return_value
 
     def __clip_input(self, V):
-        Vmin, Vmax = self.Vfs
-        if V < Vmin:
-            return Vmin
-        elif V > Vmax:
-            return Vmax
-        return V
+        Vmin, Vmax = self.Vadc
+        Vmean = V.mean
+        if V.mean < Vmin.mean:
+            Vmean = Vmin.mean
+        elif V.mean > Vmax.mean:
+            Vmean = Vmax.mean
+        return normal_rvs.NRV(Vmean, V.standard_deviation)
 
     def __find_nearest_index(self, val, options):
         return (np.abs(np.asarray(options) - val)).argmin()
@@ -168,12 +204,23 @@ class ADCChannel(object):
         """
         return min(counts, 2**self.bits)
 
+    def __convert_adc(self, V):
+        if self.signed:
+            pass  # TODO: IMPLEMENT THIS FOR SIGNED CONVERSION
+        return (float(self.__resolution - 1) * V) / self.Vadc[1]
+
+    def __calc_v_adc(self, counts):
+        return (normal_rvs.mean(self.Vadc[1]) * counts) / (self.__resolution - 1)
+
+    def __calc_v_rti(self, counts):
+        return (normal_rvs.mean(self.Vadc[1]) * counts) / (self.gain * (self.__resolution - 1))
+
 
 class AD7177Channel(ADCChannel):
     odrs = [5, 10, 16.66, 20, 49.96, 59.92, 100, 200, 397.5, 500, 1000, 2500, 5000, 10000]
 
     def __init__(self, V_ref):
-        super().__init__('AD7177', V_ref, bits=32, Av_err=0.01, odrs=AD7177Channel.odrs)
+        super().__init__('AD7177', V_ref, bits=32, is_signed=True, Av_err=0.01, odrs=AD7177Channel.odrs)
 
     # Note: the noise is currently based on using the Sinc5 + Sinc1 filter and input buffers
     @property
@@ -202,12 +249,19 @@ class ADS1283Channel(ADCChannel):
     gains = [1, 2, 4, 8, 16, 32, 64]
 
     def __init__(self, V_ref):
-        super().__init__('ADS1283', V_ref, bits=32, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
+        super().__init__('ADS1283', V_ref, bits=32, is_signed=True, Av_err=0.01, odrs=ADS1283Channel.odrs, gains=ADS1283Channel.gains)
 
     @property
     def Vfs(self):
-        Vmag = normal_rvs.mean(self.Vref / (2 * self.gain))
+        Vmag = self.Vref / (2 * self.gain)
         return (-Vmag, Vmag)
+
+    @property
+    def Vadc(self):
+        Vmag = self.Vref / 2
+        if self.signed:
+            return (-Vmag, Vmag)
+        return (normal_rvs.NRV(0), Vmag)
 
     # Note: the noise is currently based on the chop bit being enabled
     @property
@@ -251,3 +305,6 @@ if __name__ == '__main__':
     print(ch)
     ch.gain = 1
     print(ch)
+
+    ch = ADCChannel('Test', 2.5)
+    v, data = ch(1.25, return_type='voltage_rti', full=True)

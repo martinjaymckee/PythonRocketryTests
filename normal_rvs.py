@@ -1,9 +1,11 @@
+import functools
 import math
 import random
 
 import numpy as np
 
 
+@functools.total_ordering
 class NormalRandomVariable:
     @classmethod
     def Construct(cls, val):
@@ -15,9 +17,19 @@ class NormalRandomVariable:
             return cls(mean=val.mean, variance=val.variance)
         return cls(mean=val)
 
+    @classmethod
+    def Noise(cls, sd=0, variance=None):
+        return cls(mean=0, variance=sd**2 if variance is None else variance)
+
     def __init__(self, mean, sd=0, variance=None):
         self.__mean = mean
         self.__variance = (sd**2) if variance is None else variance
+
+    def __eq__(self, other):
+        return self.mean == mean(other)
+
+    def __lt__(self, other):
+        return self.mean < mean(other)
 
     @property
     def mean(self):
@@ -113,6 +125,12 @@ def abs(val):
     if isinstance(val, NormalRandomVariable):
         val = val.mean
     return abs(val)
+
+
+def oversample(val, samples):
+    if isinstance(val, NormalRandomVariable):
+        return NRV(val.mean, val.standard_deviation / math.sqrt(samples))
+    return val
 
 
 if __name__ == '__main__':

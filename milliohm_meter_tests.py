@@ -33,17 +33,6 @@ class MilliohmMeterConstraints:
         return self.__noise_limit
 
 
-# TODO: DECIDE IF THIS SHOULD STAY?
-def calcMinimumCounts(accuracy, oversampling=5):
-    return oversampling * (100 / accuracy)
-
-
-# TODO: DECIDE IF THIS SHOULD STAY?
-def calcErrorLimitedResistance(Rb, bits=10, N_min=None, Re=0):
-    N_min = (2**bits) / 10 if N_min is None else N_min
-    return ((2**bits) / N_min) * (Rb - ((N_min/(2**bits))*(Rb+Re)))
-
-
 def johnsonNoise(R, BW, T=300):
     kb = 1e6 * 1.380649e-23  # Boltzmann's constant
     return math.sqrt(4 * kb * T * R * BW)
@@ -96,7 +85,7 @@ def plotADCVoltages(fig, axs, Rss, Vbs, Vss, Vref, model=None):
     return fig, axs
 
 
-def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vss, N_samples, constraints):
+def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vss, N_samples, offset_min, constraints):
     N = len(Rss)
     fig, axs = plt.subplots(2, figsize=(16, 9))
     fig.suptitle(title)
@@ -105,13 +94,15 @@ def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vs
 
     sns.lineplot(x=Rss[idx_start:idx_end], y=dRs[idx_start:idx_end], ax=axs[0])
     axs[0].axhspan(0, constraints.target_accuracy, fc='g', alpha=0.1)
+    _, y_max = axs[0].get_ylim()
+    axs[0].set_ylim(offset_min, min(y_max, constraints.critical_accuracy))
     ymax = min(constraints.critical_accuracy, axs[0].get_ylim()[1])
     if np.max(dRs) >= constraints.critical_accuracy:
         ytext = ymax - (ymax - constraints.target_accuracy) / 10
         axs[0].annotate(
             'Critical Offset at $Rs = {:0.3g} \\Omega$'.format(Rss[idx_start]),
             xy=(Rss[idx_start], constraints.critical_accuracy),
-            xytext=(Rss[min(int(3*N/4), idx_start + int(N/30))], ytext),
+            xytext=(Rss[min(int(3*N/4), idx_start + int(N/45))], ytext),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
         )
     error_idx = np.argmax(np.array(dRs) < constraints.target_accuracy)
@@ -122,7 +113,7 @@ def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vs
         axs[0].annotate(
             'Offset Limit at $Rs = {:0.3g} \\Omega$'.format(Rs_target_offset),
             xy=(Rs_target_offset, dRs[error_idx]),
-            xytext=(Rss[min(int(3*N/4), error_idx + int(N/30))], ytext),
+            xytext=(Rss[min(int(3*N/4), error_idx + int(N/45))], ytext),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
         )
 
@@ -136,7 +127,7 @@ def plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vs
         axs[1].annotate(
             'Noise Limit at $Rs = {:0.3g} \\Omega$'.format(Rs_critical_noise),
             xy=(Rs_critical_noise, constraints.noise_limit),
-            xytext=(Rss[min(int(3*N/4), error_idx + int(N/30))], ytext),
+            xytext=(Rss[min(int(3*N/4), error_idx + int(N/45))], ytext),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3')
         )
     fig.tight_layout()
@@ -194,7 +185,8 @@ def runMilliohmMeterTest(Rs_range, Vin, Vref, ADCType, odr=5, N=1e3, NPLC=1, con
     print('\tNPLC = {}, Samples = {} per channel'.format(NPLC, N_samples))
     print('\tSampling Time = {} s'.format(NPLC/60))
 
-    Rss = np.linspace(Rs_range[0], Rs_range[1], int(N))
+    R_scale = pow((Rs_range[1]/Rs_range[0]), (1/N))
+    Rss = np.array([Rs_range[0] * pow(R_scale, idx) for idx in range(int(N))])  # np.linspace(Rs_range[0], Rs_range[1], int(N))
     dRs = []
     noises = []
     idx_start = None
@@ -227,7 +219,8 @@ def runMilliohmMeterTest(Rs_range, Vin, Vref, ADCType, odr=5, N=1e3, NPLC=1, con
     idx_end = -1 if idx_end is None else idx_end
 
     title = '{} Milli-Ohm Meter (${:0.3f} \\Omega$ to ${:0.3f} \\Omega$)'.format(ch_b.name, *Rs_range)
-    fig, axs = plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vss, N_samples, constraints)
+    # TODO: PASS IN MINIMUM OFFSET VALUE
+    fig, axs = plotResistanceErrorTest(title, Rss, dRs, noises, idx_start, idx_end, Vbs, Vss, N_samples, 0.01, constraints)
 
     if 'plot_adc_voltages' in kwargs:
         v_fig, v_axs = kwargs['plot_adc_voltages']
@@ -259,13 +252,14 @@ def runADS1283Test(Rs_range, Vin, Vref, odr=5, N=1e3, NPLC=1, constraints=None, 
 
 
 if __name__ == '__main__':
+    # TODO: READ THE TI WHITE PAPER ON PRECISION ADC NOISE ANALYSIS AND IMPLEMENT WHATEVER I FIND THERE
     Vref = normal_rvs.NRV(5, 2.85e-6/6)
     print('Vref = {}'.format(Vref))
     Vin = 5
-    Rs_range = (0.001, 1)
-    # Rs_range = (0.001, 15)
-    # Rs_range = (0.001, 1e4)
-    N = 1e4
+    Rs_range = (1e-4, 1)
+    # Rs_range = (1e-4, 15)
+    Rs_range = (1e-4, 1e4)
+    N = 1e3
     Rb = 100
 
     constraints = MilliohmMeterConstraints(
@@ -274,15 +268,11 @@ if __name__ == '__main__':
         critical_accuracy=0.1
     )
 
-    NPLC = 10
-    odr = 250
+    NPLC = 120
+    odr = 500
     voltages_fig, voltages_axs = plt.subplots(2, figsize=(16, 9))
     voltages_axs[0].set_title('Vb_adc Measurements')
     voltages_axs[1].set_title('Vs_adc Measurements')
-    # N_min = calcMinimumCounts(target_accuracy_percent)
-    # print('N_min = {} counts'.format(int(N_min)))
-    # Rs_max = calcErrorLimitedResistance(Rb, bits=ad7177_ch0.enob, N_min=N_min, Re=10)
-    # print('Rs_max = {} ohms'.format(Rs_max))
 
     runAD7177Test(
         Rs_range,

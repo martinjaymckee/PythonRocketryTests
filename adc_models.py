@@ -175,8 +175,8 @@ class ADCChannel(object):
         if full:
             data['adc_min'] = normal_rvs.NRV(int(math.floor(adc_intermediate.mean)), int(adc_intermediate.standard_deviation))
             bits_os = math.log(samples) / math.log(4)
-            data['adc_enob_step'] = 2**(self.bits - self.enob - bits_os)
-            data['adc_max'] = normal_rvs.NRV(int(math.ceil(adc_intermediate.mean + data['adc_enob_step'])), int(adc_intermediate.standard_deviation))
+            data['adc_min_step'] = 2**(self.bits - self.noise_free_bits - bits_os)
+            data['adc_max'] = normal_rvs.NRV(int(math.ceil(adc_intermediate.mean + data['adc_min_step'])), int(adc_intermediate.standard_deviation))
             data['v_adc_min'] = self.__calc_v_adc(data['adc_min'])
             data['v_adc'] = self.__calc_v_adc(adc_intermediate)
             data['v_adc_max'] = self.__calc_v_adc(data['adc_max'])

@@ -6,6 +6,9 @@ import numpy as np
 import normal_rvs
 
 
+# TODO: ADD DEFAULT RETURN_TYPE TO ADC CHANNEL TO ALLOW SHORTER FUNCTION CALLS
+#   THIS COULD ALSO SIMPLY BE DEFAULT KEYWORD ARGUMENTS
+
 def ppFromRMS(rms):
     return math.sqrt(2) * rms
 
@@ -284,6 +287,17 @@ class ADS1283Channel(ADCChannel):
             (4000, 16): 4.16, (4000, 32): 8, (4000, 64): 14.72
         }
         return noise[(self.odr, self.gain)] * 1e-6
+
+
+class LPCChannel(ADCChannel):
+    odrs = [100000]
+
+    def __init__(self, V_ref):
+        super().__init__('LPCADC', V_ref, bits=12, odrs=LPCChannel.odrs)
+
+    @property
+    def noise_rms(self):
+        return 1.5 * self.Vref * (1/2**self.bits)
 
 
 if __name__ == '__main__':

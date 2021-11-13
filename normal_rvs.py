@@ -1,9 +1,14 @@
+import builtins
 import functools
 import math
 import random
+import sys
 
 import numpy as np
 
+# TODO: IT WOULD BE GOOD TO CREATE A COMBINATION OF SYS.FLOAT_INFO.EPSILON (FOR PYTHON FLOAT)
+#   AND NP.FINFO(DTYPE).EPS/.RESOLUTION ALONG WITH 0 (EPS FOR INT) TO GET THE CORRECT ACCURACY
+#   TO USE FOR NRV CALCULATIONS
 
 @functools.total_ordering
 class NormalRandomVariable:
@@ -19,17 +24,26 @@ class NormalRandomVariable:
 
     @classmethod
     def Noise(cls, sd=0, variance=None):
-        return cls(mean=0, variance=sd**2 if variance is None else variance)
+        return cls(mean=0, variance=mean(sd)**2 if variance is None else variance)
 
-    def __init__(self, mean, sd=0, variance=None):
+    def __init__(self, mean, sd=0, variance=None, dtype=float):
+        assert not is_nrv(mean), 'Error: Trying to create recursive NRV with mean = {}'.format(mean)
+        assert not is_nrv(variance), 'Error: Trying to create recursive NRV with variance = {}'.format(variance)
+        assert not is_nrv(sd), 'Error: Trying to create recursive NRV with sd = {}'.format(sd)
         self.__mean = mean
         self.__variance = (sd**2) if variance is None else variance
+        self.__dtype = dtype
+        self.__eps = sys.float_info.epsilon if dtype is float else 0
 
     def __eq__(self, other):
         return self.mean == mean(other)
 
     def __lt__(self, other):
         return self.mean < mean(other)
+
+    @property
+    def dtype(self):
+        return self.__dtype
 
     @property
     def mean(self):
@@ -57,13 +71,13 @@ class NormalRandomVariable:
         return int(random.gauss(self.mean, self.standard_deviation))
 
     def __neg__(self):
-        return self.__class__(mean=-self.__mean, variance=self.__variance)
+        return self.__class__(mean=-self.__mean, variance=self.__variance, dtype=self.__dtype)
 
     def __add__(self, other):
         other = self.__class__.Construct(other)
         new_mean = self.__mean + other.mean
         new_variance = self.__variance + other.variance
-        return self.__class__(mean=new_mean, variance=new_variance)
+        return self.__class__(mean=new_mean, variance=new_variance, dtype=self.__dtype)
 
     def __radd__(self, other):
         return self.__add__(other)
@@ -82,7 +96,7 @@ class NormalRandomVariable:
         new_mean = mx * my
         # print('mx = {}, my = {}, vx = {}, vy = {}'.format(mx, my, vx, vy))
         new_variance = ((vx + mx**2)*(vy + my**2)) - (mx**2 * my**2)
-        return self.__class__(mean=new_mean, variance=new_variance)
+        return self.__class__(mean=new_mean, variance=new_variance, dtype=self.__dtype)
 
     def __rmul__(self, other):
         return self.__mul__(other)
@@ -91,44 +105,64 @@ class NormalRandomVariable:
         other = self.__class__.Construct(other)
         mx, my = self.__mean, other.mean
         vx, vy = self.__variance, other.variance
+        my = max(self.__eps, my)
+        # print('mx = {}, vx = {}, my = {}, vy = {}'.format(mx, vx, my, vy))        
         new_mean = mx / my
-        new_variance = (mx**2/my**2)*((vx/mx**2) + (vy/my**2))
-        return self.__class__(mean=new_mean, variance=new_variance)
+        new_variance = None
+        if -self.__eps <= mx <= self.__eps:
+            new_variance = vy/my**2
+        else:
+            new_variance = (mx**2/my**2)*((vx/mx**2) + (vy/my**2))
+        return self.__class__(mean=new_mean, variance=new_variance, dtype=self.__dtype)
 
     def __rtruediv__(self, other):
         other = self.__class__.Construct(other)
         return other.__truediv__(self)
 
+    def __pow__(self, exp):
+        assert type(exp) is int, 'Error: Unable to process power of non-integer type'
+        v = self.Construct(self)
+        N = builtins.abs(exp) - 1
+        for _ in range(N):
+            v *= self
+        if exp < 0:
+            v = 1 / v
+        return v
+
 
 NRV = NormalRandomVariable
 
 
+def is_nrv(val):
+    return isinstance(val, NormalRandomVariable)
+
+
 def mean(val):
-    if isinstance(val, NormalRandomVariable):
+    if is_nrv(val):
         return val.mean
     return val
 
 
 def variance(val):
-    if isinstance(val, NormalRandomVariable):
+    if is_nrv(val):
         return val.variance
     return 0
 
 
 def standard_deviation(val):
-    if isinstance(val, NormalRandomVariable):
+    if is_nrv(val):
         return val.standard_deviation
     return 0
 
 
 def abs(val):
-    if isinstance(val, NormalRandomVariable):
-        val = val.mean
+    if is_nrv(val):
+        val = abs(val.mean)
     return abs(val)
 
 
 def oversample(val, samples):
-    if isinstance(val, NormalRandomVariable):
+    if is_nrv(val):
         return NRV(val.mean, val.standard_deviation / math.sqrt(samples))
     return val
 

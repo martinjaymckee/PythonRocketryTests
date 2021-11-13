@@ -1,89 +1,9 @@
-
-class PID:
-    def __init__(self, Kp=1, Ki=0, Kd=0, e=0.75):
-        self.__Kp = Kp
-        self.__Ki = Ki
-        self.__Kd = Kd
-        self.__e = e
-        self.__I_sum = 0
-        self.__sp = 0
-        self.__pp_last = None
-        self.__dpp_last = 0
-
-    def __str__(self):
-        return 'PID(Kp = {}, Ki = {}, Kd = {}, e = {})'.format(self.__Kp, self.__Ki, self.__Kd, self.__e)
-    def reset(self):
-        self.__I_sum = 0
-        self.__pp_last = None
-
-    @property
-    def Kp(self): return self.__Kp
-
-    @Kp.setter
-    def Kp(self, K):
-        self.__Kp = K
-        return self.__Kp
-
-    @property
-    def Ki(self): return self.__Ki
-
-    @Ki.setter
-    def Ki(self, K):
-        self.__Ki = K
-        return self.__Ki
-
-    @property
-    def Kd(self): return self.__Kd
-
-    @Kd.setter
-    def Kd(self, K):
-        self.__Kd = K
-        return self.__Kd
-
-    @property
-    def e(self): return self.__e
-
-    @e.setter
-    def e(self, _e):
-        self.__e = _e
-        return self.__e
-
-    @property
-    def sp(self): return self.__sp
-
-    @sp.setter
-    def sp(self, _sp):
-        self.__sp = _sp
-        return self.__sp
-
-    def __call__(self, dt, pp, dpp=None):
-        err = self.sp - pp
-        # print('*** sp = {}, pp = {}, err = {}'.format(self.sp, pp, err))
-        # print('***     Kp = {}, Ki = {}, Kd = {}'.format(self.Kp, self.Ki, self.Kd))
-        # Calculate Proportional
-        P_term = self.Kp * err
-
-        # Calculate Integral
-        self.__I_sum += (dt * err)
-        I_term = (self.Ki * self.__I_sum)
-
-        # Calculate Derivative
-        if dpp is None:
-            diff = 0 if self.__pp_last is None else (pp - self.__pp_last)
-            # print('*** pp_last = {}, pp = {}, diff = {}'.format(self.__pp_last, pp, diff))
-            dpp = (diff / dt) if not dt == 0 else 0
-        self.__dpp_last = (self.__e * self.__dpp_last) + ((1-self.__e) * dpp)
-        D_term = (self.Kd * self.__dpp_last)
-        self.__pp_last = pp
-
-        # print('P_term = {}, I_term = {}, D_term = {}'.format(P_term, I_term, D_term))
-        return P_term + I_term + D_term
-
+import pid
 
 class AngleControlPID:
     def __init__(self, output_constraints=None):
-        self.__theta_pid = PID(Kp=150, Ki=0, Kd=1.5, e=0.99)
-        self.__omega_pid = PID(Kp=0.5, Ki=0, Kd=0.0, e=0.9)
+        self.__theta_pid = pid.PID(Kp=150, Ki=0, Kd=1.5, e=0.99)
+        self.__omega_pid = pid.PID(Kp=0.5, Ki=0, Kd=0.0, e=0.9)
         self.__output_constraints = output_constraints
 
     def __str__(self):
@@ -139,9 +59,9 @@ if __name__ == '__main__':
     dt = t_max / N
     ts = np.linspace(0, t_max, N)
 
-    pid1 = PID(Kp=1, Ki=1, Kd=0.5, e=0.875)
-    pid2 = PID(Kp=1, Ki=1, Kd=1, e=0.875)
-    pid3 = PID(Kp=1, Ki=1, Kd=0.25, e=0.875)
+    pid1 = pid.PID(Kp=1, Ki=1, Kd=0.5, e=0.875)
+    pid2 = pid.PID(Kp=1, Ki=1, Kd=1, e=0.875)
+    pid3 = pid.PID(Kp=1, Ki=1, Kd=0.25, e=0.875)
 
     vals1 = []
     vals2 = []

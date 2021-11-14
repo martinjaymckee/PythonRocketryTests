@@ -169,7 +169,8 @@ class ADCChannel(object):
             return_value = normal_rvs.NRV(
                 self.__clip_counts(int(adc_intermediate.mean + 0.5)),
                 int(adc_intermediate.standard_deviation),
-                dtype=int
+                dtype=int,
+                limits = (-2**(self.bits-1), 2**(self.bits-1) - 1) if self.signed else (0, 2**self.bits)
             )
         elif return_type == 'voltage_adc':
             return_value = self.__calc_v_adc(adc_intermediate)
@@ -213,11 +214,15 @@ class ADCChannel(object):
         return (float(self.__resolution - 1) * V) / self.Vadc[1]
 
     def __calc_v_adc(self, counts):
-        return (normal_rvs.mean(self.Vadc[1]) * counts) / (self.__resolution - 1)
+        v = (normal_rvs.mean(self.Vadc[1]) * counts) / (self.__resolution - 1)
+        vmin, vmax = self.Vfs
+        v.limits = (self.gain*vmin, self.gain*vmax)
+        return v
 
     def __calc_v_rti(self, counts):
-        return (normal_rvs.mean(self.Vadc[1]) * counts) / (self.gain * (self.__resolution - 1))
-
+        v = (normal_rvs.mean(self.Vadc[1]) * counts) / (self.gain * (self.__resolution - 1))
+        v.limits = self.Vfs
+        return v
 
 class AD7177Channel(ADCChannel):
     odrs = [5, 10, 16.66, 20, 49.96, 59.92, 100, 200, 397.5, 500, 1000, 2500, 5000, 10000]

@@ -10,6 +10,10 @@ import numpy as np
 #   AND NP.FINFO(DTYPE).EPS/.RESOLUTION ALONG WITH 0 (EPS FOR INT) TO GET THE CORRECT ACCURACY
 #   TO USE FOR NRV CALCULATIONS
 
+# TODO: NEED TO FIGURE OUT HOW LIMITS SHOULD BE HANDLED WITH NRV MATH.  FOR INSTANCE, SHOULD
+#   THE LIMITS BE SCALED BY THREE IN 3*NRV??? OR SHOULD THE LIMITS REMAIN THE SAME? TAKEN FROM THE
+#   FIRST OR SECOND? OR SHOULD THEY SIMPLY VANISH?
+
 @functools.total_ordering
 class NormalRandomVariable:
     @classmethod
@@ -19,14 +23,14 @@ class NormalRandomVariable:
         value is a scalar, create a new random variable with zero variance.
         """
         if isinstance(val, cls):
-            return cls(mean=val.mean, variance=val.variance)
+            return cls(mean=val.mean, variance=val.variance, dtype=val.dtype, limits=val.limits)
         return cls(mean=val)
 
     @classmethod
     def Noise(cls, sd=0, variance=None):
         return cls(mean=0, variance=mean(sd)**2 if variance is None else variance)
 
-    def __init__(self, mean, sd=0, variance=None, dtype=float):
+    def __init__(self, mean, sd=0, variance=None, dtype=float, limits=None):
         assert not is_nrv(mean), 'Error: Trying to create recursive NRV with mean = {}'.format(mean)
         assert not is_nrv(variance), 'Error: Trying to create recursive NRV with variance = {}'.format(variance)
         assert not is_nrv(sd), 'Error: Trying to create recursive NRV with sd = {}'.format(sd)
@@ -34,6 +38,7 @@ class NormalRandomVariable:
         self.__variance = (sd**2) if variance is None else variance
         self.__dtype = dtype
         self.__eps = sys.float_info.epsilon if dtype is float else 0
+        self.__limits = limits
 
     def __eq__(self, other):
         return self.mean == mean(other)
@@ -44,6 +49,15 @@ class NormalRandomVariable:
     @property
     def dtype(self):
         return self.__dtype
+
+    @property
+    def limits(self):
+        return self.__limits
+
+    @limits.setter
+    def limits(self, lim):
+        self.__limits = lim
+        return self.__limits
 
     @property
     def mean(self):
@@ -65,10 +79,10 @@ class NormalRandomVariable:
         return 'N({:g}, {:g})'.format(self.__mean, self.__variance)
 
     def __float__(self):
-        return float(random.gauss(self.mean, self.standard_deviation))
+        return float(self.__constrain(random.gauss(self.mean, self.standard_deviation)))
 
     def __int__(self):
-        return int(random.gauss(self.mean, self.standard_deviation))
+        return int(self.__constrain(random.gauss(self.mean, self.standard_deviation)))
 
     def __neg__(self):
         return self.__class__(mean=-self.__mean, variance=self.__variance, dtype=self.__dtype)
@@ -106,7 +120,7 @@ class NormalRandomVariable:
         mx, my = self.__mean, other.mean
         vx, vy = self.__variance, other.variance
         my = max(self.__eps, my)
-        # print('mx = {}, vx = {}, my = {}, vy = {}'.format(mx, vx, my, vy))        
+        # print('mx = {}, vx = {}, my = {}, vy = {}'.format(mx, vx, my, vy))
         new_mean = mx / my
         new_variance = None
         if -self.__eps <= mx <= self.__eps:
@@ -127,6 +141,15 @@ class NormalRandomVariable:
             v *= self
         if exp < 0:
             v = 1 / v
+        return v
+
+    def __constrain(self, v):
+        if self.__limits is not None:
+            vmin, vmax = self.__limits
+            if v < vmin:
+                return vmin
+            if v > vmax:
+                return vmax
         return v
 
 

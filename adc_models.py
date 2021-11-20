@@ -211,7 +211,7 @@ class ADCChannel(object):
     def __convert_adc(self, V):
         if self.signed:
             pass  # TODO: IMPLEMENT THIS FOR SIGNED CONVERSION
-        return (float(self.__resolution - 1) * V) / self.Vadc[1]
+        return (float(self.__resolution - 1) * V.random_sample) / self.Vadc[1]
 
     def __calc_v_adc(self, counts):
         v = (normal_rvs.mean(self.Vadc[1]) * counts) / (self.__resolution - 1)

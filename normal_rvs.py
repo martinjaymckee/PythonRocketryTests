@@ -71,8 +71,12 @@ class NormalRandomVariable:
     def standard_deviation(self):
         return math.sqrt(self.__variance)
 
+    @property
+    def random_sample(self):
+        return self.__class__(self.dtype(self), variance=self.variance, dtype=self.dtype, limits=self.limits)
+
     def sample(self, N, dtype=float):
-        samples = [dtype(self) for _ in range(N)]
+        samples = [self.dtype(self) for _ in range(N)]
         return np.array(samples)
 
     def __str__(self):

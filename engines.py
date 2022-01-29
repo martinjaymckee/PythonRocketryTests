@@ -114,6 +114,9 @@ class Engine(rocket_components.Component):
     def cg(self, t0):  # Overload Component Value
         return self.pos
 
+    def properties(self, t):
+        pass
+
 
 def load_engine_files(directory=None):
     directory = './' if directory is None else directory
@@ -169,7 +172,7 @@ class EngineDirectory:
 
 if __name__ == '__main__':
     dt = 0.01
-    engines = load_engine_files('./engines')
+    engines = load_engine_files('./Engines')
 
     fig, ax = plt.subplots(1, figsize=(15, 12), sharex=True)
     fig.tight_layout()

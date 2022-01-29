@@ -57,11 +57,12 @@ if __name__ == '__main__':
     t_change = 1.5
     N = 100
     dt = t_max / N
+    print('dt = {} s'.format(dt))
     ts = np.linspace(0, t_max, N)
 
-    pid1 = pid.PID(Kp=1, Ki=1, Kd=0.5, e=0.875)
-    pid2 = pid.PID(Kp=1, Ki=1, Kd=1, e=0.875)
-    pid3 = pid.PID(Kp=1, Ki=1, Kd=0.25, e=0.875)
+    pid1 = pid.PID(Kp=2.25, Ki=1.75, Kd=-0.9, dpp_filter=pid.RecursiveSmoothingFilter(e=0.8))
+    pid2 = pid.PID(Kp=1, Ki=1, Kd=-0.1, dpp_filter=pid.RecursiveSmoothingFilter(e=0.6))
+    pid3 = pid.PID(Kp=0.7, Ki=0.95)
 
     vals1 = []
     vals2 = []
@@ -80,19 +81,21 @@ if __name__ == '__main__':
         pid2.sp = tgt
         pid3.sp = tgt
         new_val = pid1(dt, last_val1)
-        last_val1 = new_val #( last_val1 + new_val ) / 2
+        last_val1 = new_val
         vals1.append(new_val)
         new_val = pid2(dt, last_val2)
-        last_val2 = new_val #( last_val2 + new_val ) / 2
+        last_val2 = new_val
         vals2.append(new_val)
         new_val = pid3(dt, last_val3)
-        last_val3 = new_val#( last_val3 + new_val ) / 2
+        last_val3 = new_val
         vals3.append(new_val)
 
     fig, ax = plt.subplots(1, figsize=(15, 12))
     N_end = N
-    ax.plot(ts[:N_end], tgts[:N_end], c='k')
-    ax.plot(ts[:N_end], vals1[:N_end])
-    ax.plot(ts[:N_end], vals2[:N_end])
-    ax.plot(ts[:N_end], vals3[:N_end])
+    ax.plot(ts[:N_end], tgts[:N_end], c='k', label='ref')
+    ax.plot(ts[:N_end], vals1[:N_end], label='pid1')
+    ax.plot(ts[:N_end], vals2[:N_end], label='pid2')
+    ax.plot(ts[:N_end], vals3[:N_end], label='pid3')
+    ax.axvline(t_change, c='c')
+    ax.legend()
     plt.show()

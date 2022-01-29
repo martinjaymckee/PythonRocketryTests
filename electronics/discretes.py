@@ -8,7 +8,7 @@ class __CircuitComponent:
 
     def __init__(self,  impedance=None):
         self.__impedance = impedance
-        self.__id = __ID
+        self.__id = __CircuitComponent.__ID
         __CircuitComponent.__ID += 1
 
     @property

@@ -2,10 +2,13 @@ import ambiance
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import quaternion
 import seaborn as sns
 
 import rotation_model
 
+
+# TODO: ADD THE ABILITY TO READ VALUES FROM THIS BY RESAMPLING (AT ARBITRARY FREQUENCY) TO A BASE TYPE
 
 class OpenRocketReader:
     def __init__(self, filename):
@@ -30,13 +33,17 @@ class OpenRocketReader:
 
         self.__thetas = np.array([[], []])
         # dt = 0.1
+        # TODO: INITIALIZE THE ORIENTATION, PROBABLY USING THETA_VERT AND THETA_LAT
         q_integrator = rotation_model.RotationOrientationIntegrator(oversampling=None, dt_max=1e-1)
-        # TODO: MAKE THE QUATERNION INTEGRATOR WORK WITH A LIST OF TIMES TO CALCULATE DTS INTERNALLY
         qs = q_integrator(self.__omegas, ts=self.__ts)
-        qs = []
         self.__qs = np.array(qs)
 
         # Calculate rocket accelerations using a_v(t), a_lat(t), and qw(t)
+
+        as_v = self.__data['a_v']
+        as_lat = self.__data['a_lat']
+        accels = [self.__extract_accels(a_v, a_lat, qs) for a_v, a_lat, qs in zip(as_v, as_lat, qs)]
+        self.__accels = np.array(accels)
 
         self.__hs = np.array(self.__data['h'])
         self.__Ps = ambiance.Atmosphere(self.__hs).pressure
@@ -62,6 +69,10 @@ class OpenRocketReader:
         return self.__omegas
 
     @property
+    def accels(self):
+        return self.__accels
+
+    @property
     def hs(self):
         # h_asl = ambiance.Atmosphere.from_pressure(133.322*self.__data['P_air'][0]).h
         # print('h_asl = {} m'.format(h_asl))
@@ -72,8 +83,16 @@ class OpenRocketReader:
         return 133.322 * np.array(self.__data['P_air'])  # return as Pascals
 
     @property
-    def Ts(self):  # TODO: FITURE OUT WHAT THIS IS ACTUALLY DOING?
+    def Ts(self):  # TODO: FIGURE OUT WHAT THIS IS ACTUALLY DOING?
         return np.array(self.__data['T_air'])
+
+    def __extract_accels(self, a_v, a_lat, q):
+        # print('Input: a_v = {}, a_lat = {}, q = {}'.format(a_v, a_lat, q))
+        a_v = q * np.quaternion(0, 0, 0, a_v) * q.conjugate()
+        a_lat = q * np.quaternion(0, a_lat, 0, 0) * q.conjugate()
+        a_tot = (a_v + a_lat)
+        # print('Output: a_v = {}, a_lat = {}, a_tot = {}'.format(a_v, a_lat, a_tot))
+        return a_tot.x, a_tot.y, a_tot.z
 
 
 if __name__ == '__main__':
@@ -81,42 +100,52 @@ if __name__ == '__main__':
     filename = '../LPR/Nartrek/Black_Brant_VB_Mule_D9.csv'
 
     parser = OpenRocketReader(filename)
-
-    fig, axs = plt.subplots(3, figsize=(16, 9), sharex=True)
-    sns.lineplot(x='t', y='omega_r', data=parser.data, ax=axs[0])
-    sns.lineplot(x='t', y='omega_p', data=parser.data, ax=axs[1])
-    sns.lineplot(x='t', y='omega_y', data=parser.data, ax=axs[2])
-    # axs[0].set_xlim(0, 8)
-    fig.tight_layout()
-    fig.canvas.manager.window.showMaximized()
-
-    fig, axs = plt.subplots(2, figsize=(16, 9), sharex=True)
-    sns.lineplot(x='t', y='theta_vert', data=parser.data, ax=axs[0])
-    sns.lineplot(x='t', y='theta_lat', data=parser.data, ax=axs[1])
-    # axs[0].set_xlim(0, 8)
-    fig.tight_layout()
-    fig.canvas.manager.window.showMaximized()
-
-    fig, axs = plt.subplots(2, figsize=(16, 9), sharex=True)
-    sns.lineplot(x=parser.ts, y=parser.hs, ax=axs[0])
-    sns.lineplot(x=parser.ts, y=parser.Ps, ax=axs[1])
-    fig.tight_layout()
-    fig.canvas.manager.window.showMaximized()
-
-    # fig, axs = plt.subplots(2, figsize=(15, 10), sharex=True)
-    # a = parser.data['a']
-    # a_v = parser.data['a_v']
-    # a_lat = parser.data['a_lat']
-    # a_est = np.sqrt(np.square(a_v) + np.square(a_lat))
-    # # sns.lineplot('t', 'a', data=data, ax=axs[0])
-    # sns.lineplot('t', 'a_v', data=parser.data, ax=axs[0])
-    # sns.lineplot('t', 'a_lat', data=parser.data, ax=axs[0])
+    #
+    # fig, axs = plt.subplots(3, figsize=(16, 9), sharex=True)
+    # sns.lineplot(x='t', y='omega_r', data=parser.data, ax=axs[0])
+    # sns.lineplot(x='t', y='omega_p', data=parser.data, ax=axs[1])
+    # sns.lineplot(x='t', y='omega_y', data=parser.data, ax=axs[2])
+    # # axs[0].set_xlim(0, 8)
+    # fig.tight_layout()
+    # fig.canvas.manager.window.showMaximized()
+    #
+    # fig, axs = plt.subplots(2, figsize=(16, 9), sharex=True)
+    # sns.lineplot(x='t', y='theta_vert', data=parser.data, ax=axs[0])
+    # sns.lineplot(x='t', y='theta_lat', data=parser.data, ax=axs[1])
+    # # axs[0].set_xlim(0, 8)
+    # fig.tight_layout()
+    # fig.canvas.manager.window.showMaximized()
+    #
+    # fig, axs = plt.subplots(2, figsize=(16, 9), sharex=True)
+    # sns.lineplot(x=parser.ts, y=parser.hs, ax=axs[0])
+    # sns.lineplot(x=parser.ts, y=parser.Ps, ax=axs[1])
+    # fig.tight_layout()
+    # fig.canvas.manager.window.showMaximized()
+    #
+    fig, axs = plt.subplots(3, figsize=(15, 10), sharex=True)
+    a = parser.data['a']
+    a_v = parser.data['a_v']
+    a_lat = parser.data['a_lat']
+    a_est = np.sqrt(np.square(a_v) + np.square(a_lat))
+    # sns.lineplot('t', 'a', data=data, ax=axs[0])
+    sns.lineplot('t', 'a_v', data=parser.data, ax=axs[0])
+    sns.lineplot('t', 'a_lat', data=parser.data, ax=axs[0])
     # sns.lineplot('t', 'a_c', data=data, ax=axs[0])
-    # sns.lineplot(x=parser.data['t'], y=a-a_est, ax=axs[1])  # NOTE: a = magnitude of the vector created by a_v and a_lat
+    sns.lineplot(x=parser.data['t'], y=a-a_est, ax=axs[1])  # NOTE: a = magnitude of the vector created by a_v and a_lat
     # axs[0].set_xlim(0, 8)
     # axs[0].set_ylim(-25, 50)
-    # fig.tight_layout()
-    # fig.canvas.manager.window.showMaximized(True)
+    as_x = [x for x, _, _ in parser.accels]
+    as_y = [y for _, y, _ in parser.accels]
+    as_z = [z for _, _, z in parser.accels]
+    sns.lineplot(x=parser.data['t'], y=as_x, ax=axs[2], label='ax')
+    sns.lineplot(x=parser.data['t'], y=as_y, ax=axs[2], label='ay')
+    sns.lineplot(x=parser.data['t'], y=as_z, ax=axs[2], label='az')
+
+    axs[0].legend()
+    axs[1].legend()
+    axs[2].legend()
+    fig.tight_layout()
+    fig.canvas.manager.window.showMaximized()
 
     plt.show()
     # omegas = parser.omegas

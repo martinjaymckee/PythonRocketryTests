@@ -1,0 +1,40 @@
+RDT Off
+	Battery Capacity = 500.0 mAh
+	Self-Discharge Current = 13.9 uA
+	System Current = 14.0 uA
+	Battery Life = 2y:17d:0h:17m
+	Load Breakdown (>0.5 %):
+		NL17SZ00 -> 71.4%
+		MIC94064 -> 14.3%
+		bq24040 -> 7.1%
+		NL17SZ00_Input -> 7.1%
+
+RDT Full
+	Battery Capacity = 500.0 mAh
+	Self-Discharge Current = 13.9 uA
+	System Current = 40.18 mA
+	Battery Life = 12h:26m
+	Load Breakdown (>0.5 %):
+		RFM9x_Rx -> 29.9%
+		HM-11_Tx -> 24.0%
+		ORG-141x -> 14.9%
+		LPC845 -> 10.0%
+		HM-11_Rx -> 8.2%
+		Buzzer -> 6.2%
+		BMX160 -> 3.9%
+		BMP388 -> 2.0%
+
+Effective LoRa Payload Rate = 1412 bps
+Tracker Full
+	Battery Capacity = 150.0 mAh
+	Self-Discharge Current = 4.2 uA
+	System Current = 19.09 mA
+	Battery Life = 7h:51m
+	Load Breakdown (>0.5 %):
+		RFM9x_Tx -> 54.4%
+		ORG-141x -> 20.6%
+		RFM9x_Rx -> 9.1%
+		LPC845 -> 8.7%
+		BMP388 -> 4.2%
+		LED -> 2.6%
+

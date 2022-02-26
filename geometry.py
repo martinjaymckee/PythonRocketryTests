@@ -63,6 +63,10 @@ class Line3D:
         else:
             assert False, 'Error: Attempting to create a line from {} points'.format(len(ps))
 
+    @classmethod
+    def FromPointVector(cls, p, v):
+        return cls(p, v)
+
     def __init__(self, origin, direction):
         self.__origin = origin
         self.__direction = direction

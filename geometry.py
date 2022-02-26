@@ -55,6 +55,52 @@ class Plane3D:
         return self.origin
 
 
+class Line3D:
+    @classmethod
+    def FromPoints(cls, *ps):
+        if len(ps) == 2:
+            return cls(ps[0], ps[1]-ps[0])
+        else:
+            assert False, 'Error: Attempting to create a line from {} points'.format(len(ps))
+
+    def __init__(self, origin, direction):
+        self.__origin = origin
+        self.__direction = direction
+
+    @property
+    def origin(self):
+        return self.__origin
+
+    @property
+    def direction(self):
+        return self.__direction
+
+
+def LinePlaneIntersect3D(line, plane):
+    p = line.origin
+    v = line.direction
+    a, b, c, d = plane.a, plane.b, plane.c, plane.d
+    t = -(a*p[0] + b*p[1] + c*p[2] + d) / (a*v[0] + b*v[1] + c*v[2])
+    if t is None:
+        return None
+    return p + t*v
+
+
+def plotPoint3D(point, ax, **kwargs):
+    ax.scatter([point[0]], [point[1]], [point[2]], **kwargs)
+
+
+def plotVector3D(direction, ax, offset=None, **kwargs):
+    offset = np.array([0, 0, 0]) if offset is None else offset
+    ax.quiver([offset[0]], [offset[1]], [offset[2]], [direction[0]], [direction[1]], [direction[2]], **kwargs)
+
+
+def plotPlane3D(plane, xlim, ylim, ax, N=10, **kwargs):
+    X, Y = np.meshgrid(np.linspace(xlim[0], xlim[1], N), np.linspace(ylim[0], ylim[1], N))
+    Z = (-plane.d - plane.a * X - plane.b * Y) / plane.c
+    ax.plot_wireframe(X, Y, Z, **kwargs)
+
+
 if __name__ == '__main__':
     import mpl_toolkits.mplot3d
     import matplotlib.pyplot as plt
@@ -68,6 +114,8 @@ if __name__ == '__main__':
     p1 = np.array([1, 1, 1])
     p2 = np.array([1, 0, 1])
 
+    p3 = np.array([1, 1, 0])
+
     # p0 = np.array([3, 1, 1])
     # p1 = np.array([1, 4, 2])
     # p2 = np.array([1, 3, 4])
@@ -76,28 +124,41 @@ if __name__ == '__main__':
     plane.origin_xy(0.5, 0.5)
     # plane.origin_xy(2, 2)
 
+    p_end =  np.array([0.33, 0.1, .75])
+    line = Line3D.FromPoints(p3, p_end)
+
     fig = plt.figure()
     ax = plt.subplot(111, projection='3d')
-    ax.scatter([p0[0], p1[0], p2[0]], [p0[1], p1[1], p2[1]], [p0[2], p1[2], p2[2]], alpha=0.5, color='b')
-    X, Y = np.meshgrid(np.linspace(0, 1, N), np.linspace(0, 1, N))
-    # X, Y = np.meshgrid(np.linspace(1, 4, N), np.linspace(1, 4, N))
+    # ax.scatter([p0[0], p1[0], p2[0]], [p0[1], p1[1], p2[1]], [p0[2], p1[2], p2[2]], alpha=0.5, color='b')
 
-    Z = (-plane.d - plane.a * X - plane.b * Y) / plane.c
-
-    # Plot the plane
-    ax.plot_wireframe(X, Y, Z, color='k', lw=0.5)
+    p4 = LinePlaneIntersect3D(line, plane)
+    plotPlane3D(plane, (0, 1), (0, 1), ax, color='k', lw=0.5)
 
     # Plot the origin
-    print('Origin = {}'.format(plane.origin))
-    ax.scatter([plane.origin[0]], [plane.origin[1]], [plane.origin[2]], alpha=0.5, color='r')
+    print('Plane Origin = {}'.format(plane.origin))
+    plotPoint3D(plane.origin, ax, alpha=0.5, color='r')
 
     # Plot the normal
-    print('Normal = {}'.format(plane.normal))
-    ax.quiver([plane.origin[0]], [plane.origin[1]], [plane.origin[2]], [plane.normal[0]], [plane.normal[1]], [plane.normal[2]], alpha=0.5, length=0.5)
+    print('Plane Normal = {}'.format(plane.normal))
+    plotVector3D(plane.normal, ax, offset=plane.origin, alpha=0.5, length=0.5)
+
+    # Plot the line points
+    plotPoint3D(p3, ax, alpha=0.5, color='m')
+    plotPoint3D(p_end, ax, alpha=0.5, color='m')
+
+    # Plot the line direction
+    print('Line Direction = {}'.format(line.direction))
+    plotVector3D(line.direction, ax, offset=line.origin, alpha=0.5, length=0.5)
+
+    # Plot the Intersection
+    print('Intersection = {}'.format(p4))
+    plotPoint3D(p4, ax, alpha=0.5, color='g')
+
 
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('z')
     plt.show()
 
+    print('Intersection = {}'.format(LinePlaneIntersect3D(line, plane)))
     # print(X, Y)

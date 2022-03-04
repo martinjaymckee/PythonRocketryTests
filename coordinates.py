@@ -67,6 +67,29 @@ def ECEFToLLH(ecef, ellipsoid=WGS84(), algo='Newton-Raphson', iters=4):
             h = (p / math.cos(lat)) - N
             lat = math.atan((z / p) * (1 / (1 - ellipsoid.e2 * (N / (N + h)))))
         return (math.degrees(lat), math.degrees(lon), h)
+    elif algo == 'Ferrari':
+        # Based on formulation on Wikipedia, variable names taken from there.
+        #   Note: Currently, this is not working.  The latitude is approximately ~30m off, but the height is completely wrong.
+        p = math.sqrt(x**2 + y**2)
+        F = 54 * ellipsoid.b**2 * z**2
+        G = p**2 + (1-ellipsoid.e2)*z**2 - ellipsoid.e2*(ellipsoid.a**2 - ellipsoid.b**2)
+        c = (ellipsoid.e2**2 * F * p**2) / (G**3)
+        s = pow((1 + c + math.sqrt(c**2 + 2*c)), 1/3)
+        k = s + 1 + 1/s
+        P = F / (3 * k**2 * G**2)
+        Q = math.sqrt(1 + (2 * ellipsoid.e2**2 * P))
+        print('Q = {}'.format(Q))
+        r0 = ((-P*ellipsoid.e2*p)/(1+Q)) + math.sqrt(0.5*ellipsoid.a**2*(1 + 1/Q) - ((P*(1-ellipsoid.e2)*z**2)/(Q*(1+Q)) - (0.5*P*p**2)))
+        print('r0 = {}'.format(r0))
+        U = math.sqrt((p - ellipsoid.e2*r0)**2 + z**2)
+        V = math.sqrt((p - ellipsoid.e2*r0)**2 + (1-ellipsoid.e2)*z**2)
+        z0 = (ellipsoid.b**2 * z) / (ellipsoid.a * V)
+        h = U * (1 - (ellipsoid.b**2 / (ellipsoid.a * V)))
+        print('a = {}, b = {}, U = {}, V = {}'.format(ellipsoid.a, ellipsoid.b, U, V))
+        print('b^2 / aV = {}'.format((ellipsoid.b**2 / (ellipsoid.a * V))))
+        lat = math.atan2((z + ellipsoid.e2_prime*z0), p)
+        lon = math.atan2(y, x)
+        return (math.degrees(lat), math.degrees(lon), h)
     return (0, 0, 0)
 
 
@@ -89,6 +112,7 @@ if __name__ == '__main__':
     ecef_tgt = (-1217740.797, -4884091.569, 3906367.461)
     ecef_err = np.array(ecef_tgt) - np.array(ecef)
     llh_convert = ECEFToLLH(ecef)
+
     llh_err = np.array(llh) - np.array(llh_convert)
     print('Using WGS84, LLH({} deg, {} deg, {} m) ->\tECEF({} m, {} m, {} m)'.format(*llh, *ecef))
     print("\tECEF Error -> ({} m, {} m, {} m)".format(*ecef_err))

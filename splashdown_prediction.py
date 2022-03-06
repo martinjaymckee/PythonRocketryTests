@@ -65,10 +65,12 @@ def localizationCombinations(n, k):
 
 
 class SplashdownStatisticsProcessor:
-    def __init__(self, buffer=None, N=5, M=2, history_size=None, sim_kws={}, f_ref=1):
+    def __init__(self, buffer=None, N=6, M=3, history_size=None, sim_kws={}, f_ref=1, track_reference_plane=True):
         self.__buffer = SplashdownBuffer(N=N-1) if buffer is None else buffer
         self.__M = M
         self.__reference_plane = None
+        self.__reference_height = 0
+        self.__track_reference_plane = track_reference_plane
         self.__history = []
         self.__history_size = int(5 * localizationCombinations(N, M) if history_size is None else history_size)
         t_ref = 1 / f_ref
@@ -88,6 +90,7 @@ class SplashdownStatisticsProcessor:
         self.lat_covs = []
         self.lon_means = []
         self.lon_covs = []
+        self.history_buffer = []
 
     @property
     def splashdown_plane(self):
@@ -99,6 +102,7 @@ class SplashdownStatisticsProcessor:
 
     def set_splashdown_plane(self, llh):
         self.__reference_plane = getIntersectionPlane(llh)
+        self.__reference_height = llh[2]
 
     def update(self, new_beacon):
         if self.__simulate:
@@ -143,10 +147,14 @@ class SplashdownStatisticsProcessor:
             lats = np.array(lats)
             lons = np.array(lons)
             self.ts.append(beacon.t)
-            self.lat_means.append(np.average(lats, weights=ws))
+            lat_mean = np.average(lats, weights=ws)
+            self.lat_means.append(lat_mean)
             self.lat_covs.append(np.cov(lats, aweights=ws))
-            self.lon_means.append(np.average(lons, weights=ws))
+            lon_mean = np.average(lons, weights=ws)
+            self.lon_means.append(lon_mean)
             self.lon_covs.append(np.cov(lons, aweights=ws))
+            self.history_buffer.append((beacon.t, self.__history[:]))
+
             if False:
                 g = sns.JointGrid(x=lats, y=lons)
                 g.plot_joint(sns.kdeplot, fill=True, alpha=0.5, legend=False)
@@ -158,7 +166,20 @@ class SplashdownStatisticsProcessor:
     def __update_reference_plane(self, beacon):
         if self.__reference_plane is None:
             llh = coordinates.ECEFToLLH(beacon.pos)
-            self.set_splashdown_plane(llh)
+            self.set_splashdown_plane((llh[0], llh[1], 0)) # THIS NEEDS TO BE BASED ON THE GROUND POSITION AND, AS SUCH, PROCESSING EITHER NEEDS TO START PREFLIGHT OR USE THE GROUNDSTATION AS REFERENCE INNITIALLY
+        elif self.__track_reference_plane and (len(self.__history) > 0):
+            lats = []
+            lons = []
+            ws = []
+            for lat, lon, _, t in self.__history:
+                lats.append(lat)
+                lons.append(lon)
+                ws.append(math.exp(-self.__tau_history * t))
+            lats = np.array(lats)
+            lons = np.array(lons)
+            lat_mean = np.average(lats, weights=ws)
+            lon_mean = np.average(lons, weights=ws)
+            self.set_splashdown_plane((lat_mean, lon_mean, self.__reference_height))
 
     def __process_beacons_pos_vel(self, t_now, past_beacons, beacon):
         def f_vec(x):
@@ -277,11 +298,11 @@ if __name__ == '__main__':
     import openrocket_api
 
     class OpenrocketGPSTrackerSource:
-        def __init__(self, filename, beacon_rate_kwargs={}, gps_err_kwargs={}):
+        def __init__(self, filename, beacon_rate_kwargs={}, gps_err_kwargs={}, noError=False):
             self.__filename = filename
             self.__parser = openrocket_api.OpenRocketReader(filename)
             self.__beacon_rate_config = TrackerBeaconRateConfig(**beacon_rate_kwargs)
-            self.__error_model = gps_error_model.GPSErrorModel(**gps_err_kwargs)
+            self.__error_model = None if noError else gps_error_model.GPSErrorModel(**gps_err_kwargs)
             self.__localization_beacons = self.__extract_tracker_beacons()
 
         @property
@@ -293,10 +314,18 @@ if __name__ == '__main__':
             ts = self.__parser.ts
             llhs = self.__parser.pos_llh
             t_last = ts[0]
-            xyz_last = np.array(coordinates.LLHToECEF(self.__error_model(*llhs[0])))
+            xyz_last = None
+            if self.__error_model is None:
+                xyz_last = np.array(coordinates.LLHToECEF(llhs[0]))
+            else:
+                xyz_last = np.array(coordinates.LLHToECEF(self.__error_model(*llhs[0])))
             localization_beacons.append(LocalizationBeacon(t_last, xyz_last, np.array([0, 0, 0])))
             for t, llh in zip(ts, llhs):
-                xyz = np.array(coordinates.LLHToECEF(self.__error_model.offset(*llh)))
+                xyz = None
+                if self.__error_model is None:
+                    xyz = np.array(coordinates.LLHToECEF(llh))
+                else:
+                    xyz = np.array(coordinates.LLHToECEF(self.__error_model.offset(*llh)))
                 dt = t - t_last
                 d = self.__distance(xyz_last, xyz)
                 if self.__beacon_rate_config.isValidBeacon(dt, d):
@@ -304,7 +333,8 @@ if __name__ == '__main__':
                     localization_beacons.append(LocalizationBeacon(t, xyz, vel))
                     t_last = t
                     xyz_last = xyz
-                    self.__error_model.update()
+                    if self.__error_model is not None:
+                        self.__error_model.update()
             return localization_beacons
 
         def __distance(self, xyz_a, xyz_b):
@@ -314,11 +344,11 @@ if __name__ == '__main__':
             return (xyz_b - xyz_a) / dt
 
     deg_to_m = 40.075e6 / 360
-    filename = '../HPR/66mm_L2_1.csv'
-    # filename = '../LPR/Black_Brant_VB_Mule_Wind_80.csv'
+    # filename = '../HPR/66mm_L2_1.csv'
+    filename = '../LPR/Black_Brant_VB_Mule_Wind_80.csv'
     # filename = '../LPR/Black_Brant_VB_Mule_High_Altitude.csv'
 
-    beacon_rate_kwargs = {'t_max': 5, 'l_max':10, 'f_max': 4}
+    beacon_rate_kwargs = {'t_max': 5, 'l_max': 7.5, 'f_max': 4}
     tracker_source = OpenrocketGPSTrackerSource(filename, beacon_rate_kwargs=beacon_rate_kwargs)
     beacons = tracker_source.localization_beacons
     t_apogee = estimatedApogeeTime(beacons)
@@ -358,6 +388,21 @@ if __name__ == '__main__':
         ax.axvline(t_end, c='y')
         ax.axvline(t_apogee, c='y')
         ax.legend()
+
+    # Plot History Points
+    fig, ax = plt.subplots(1, constrained_layout=True)
+    ax.set_aspect('equal')
+
+    ts = []
+    lats = []
+    lons = []
+    for t, history in splashdown_processor.history_buffer:
+        for lat, lon, _, _ in history:
+            ts.append(t)
+            lats.append(deg_to_m * (lat-lat_ref))
+            lons.append(deg_to_m * (lon-lon_ref))
+    sns.scatterplot(x=lats, y=lons, c=ts, alpha=0.5, s=5, cmap='viridis', ax=ax, ec=None)
+
     # Plot Beacons and Estimates
     # print('Number of Beacons = {}'.format(len(beacons)))
     # fig, ax = plotBeacons(beacons)

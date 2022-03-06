@@ -40,6 +40,7 @@ def calcAdjustableLT3086Resistors(Vdac, Vouts, Vref=0.4, Iset=50e-6, Rb=None, do
 
 
 if __name__ == '__main__':
+
     Vin = 5
     Vout = (1, 9)
     Imax = 0.5

@@ -2,7 +2,7 @@ import random
 
 
 class GPSErrorModel:
-    def __init__(self, lat_params=None, lon_params=None, alt_params=None, force_noisy=False):
+    def __init__(self, lat_params=None, lon_params=None, alt_params=None, force_noisy=False, enable_white_noise=True):
         m_to_deg = 360 / 40.075e6
         self.__lat_d_step = 1.85e-6 if lat_params is None else lat_params[0]
         self.__lat_sigma_step = 1.5e-7 if lat_params is None else lat_params[1]
@@ -23,12 +23,13 @@ class GPSErrorModel:
         self.__alt_offset = random.gauss(0, self.__alt_sigma_abs)
 
         self.__force_noisy = force_noisy
+        self.__enable_white_noise = enable_white_noise
 
     def __call__(self, lat, lon, alt, doupdate=True):
         def doStep(offset, d, sigma_abs, p):
             if self.__force_noisy:
-                p = min(1, 10 * p)
-                d = 100 * d
+                p = min(1, 3 * p)
+                d = 10 * d
             p_step = random.uniform(0, 1)
             if p_step <= p:
                 p_dir = random.uniform(0, 1)
@@ -42,7 +43,13 @@ class GPSErrorModel:
             self.__lat_offset = doStep(self.__lat_offset, self.__lat_d_step, self.__lat_sigma_abs, self.__lat_p)
             self.__lon_offset = doStep(self.__lon_offset, self.__lon_d_step, self.__lon_sigma_abs, self.__lon_p)
             self.__alt_offset = doStep(self.__alt_offset, self.__alt_d_step, self.__alt_sigma_abs, self.__alt_p)
-        return lat + self.__lat_offset, lon + self.__lon_offset, alt + self.__alt_offset
+        lat_noise = random.gauss(0, self.__lat_sigma_step) if self.__enable_white_noise else 0
+        lon_noise = random.gauss(0, self.__lon_sigma_step) if self.__enable_white_noise else 0
+        alt_noise = random.gauss(0, self.__alt_sigma_step) if self.__enable_white_noise else 0
+        lat += (self.__lat_offset + lat_noise)
+        lon += (self.__lon_offset + lon_noise)
+        alt += (self.__alt_offset + alt_noise)
+        return lat, lon, alt
 
     def offset(self, lat, lon, alt):
         return self(lat, lon, alt, doupdate=False)

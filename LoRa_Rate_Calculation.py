@@ -83,10 +83,22 @@ def freespace_path_loss(f, d):
     return -20*math.log10(c/f) + 20*math.log10(d) + 20*math.log10(4*math.pi)
 
 
+def two_ray_path_loss(f, d, ht, hr=None, Gr=1, Gt=1):
+    # Note: Using approximated version from Wikipedia
+    c = 299792458
+    hr = ht if hr is None else hr
+    lam = c / f
+    rat = (4 * math.pi * ht * hr) / lam
+    assert d > (10 * rat), 'Error: Distance between Rx and Tx insufficient'
+    PL = (40 * math.log10(d) - (10 * math.log10(Gr * Gt * hr * ht)))
+    return PL
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
 
     print('Freespace Path Loss of 435MHz signal over 60km = {} dB'.format(freespace_path_loss(435e6, 60e3)))
+    print('Two Ray Path Loss of 435MHz signal over 2km at 1m above ground = {} dB'.format(two_ray_path_loss(435e6, 2e3, 2.5)))
 
     payload_bytes = list(range(16, 29))
     SFs = [6, 7, 8, 9, 10, 11, 12]

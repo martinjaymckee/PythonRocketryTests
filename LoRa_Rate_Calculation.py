@@ -101,14 +101,15 @@ if __name__ == '__main__':
     print('Two Ray Path Loss of 435MHz signal over 2km at 1m above ground = {} dB'.format(two_ray_path_loss(435e6, 2e3, 2.5)))
 
     payload_bytes = list(range(16, 29))
+    payload_bytes = list(range(20, 70))
     SFs = [6, 7, 8, 9, 10, 11, 12]
 
     explicit_header = True
     packet_crc = True
-    duty_cycle_limit = 90
+    duty_cycle_limit = 35
 
-    f_fix = 5
-    f_additional = 1
+    f_fix = 1 #5
+    f_additional = 0
     BW = 125000
     CR = '4/8'
 

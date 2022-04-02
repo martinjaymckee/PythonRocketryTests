@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+from mpl_toolkits import mplot3d
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -32,8 +33,23 @@ def validity_map(data, limits, validity=None):
     return np.array(valid)
 
 
+def plotECEF(ts, xs, ys, zs, offset=5):
+    fig = plt.figure(constrained_layout=True)
+    ax = plt.axes(projection='3d')
+    ax.scatter3D(xs, ys, zs, c=ts, cmap='viridis', lw=0)
+    x_mean = xs.mean()
+    y_mean = ys.mean()
+    z_mean = zs.mean()
+    ax.set_xlim(x_mean - offset, x_mean + offset)
+    ax.set_ylim(y_mean - offset, y_mean + offset)
+    ax.set_zlim(z_mean - offset, z_mean + offset)
+    ax.scatter3D([x_mean], [y_mean], [z_mean], c='r', alpha=0.75, s=100, lw=0)
+    return fig, ax
+
+
 if __name__ == '__main__':
-    import random
+    import coordinates
+    # import random
 
     W = 1.5
     data = pd.read_csv("data/gps_stationary_2_16_2022_3.csv")
@@ -48,10 +64,10 @@ if __name__ == '__main__':
     alts = data.iloc[idx_start:, 5]
 
     # dts_plot = graph_series("Time Deltas", dts)
-    lats_plot = graph_series("Latitudes", lats)
-    lons_plot = graph_series("Longitudes", lons)
-    alts_plot = graph_series("Altitudes", alts)
-    # sats_plot = graph_series("Satellites", sats)
+    # lats_plot = graph_series("Latitudes", lats)
+    # lons_plot = graph_series("Longitudes", lons)
+    # alts_plot = graph_series("Altitudes", alts)
+    sats_plot = graph_series("Satellites", sats)
 
     lat_mean, lat_sd, lat_limits = series_stats(lats, W=W)
     lon_mean, lon_sd, lon_limits = series_stats(lons, W=W)
@@ -82,40 +98,60 @@ if __name__ == '__main__':
 
     # sns.jointplot(x=lat_lon_errs, y=alts_err, kind='kde', joint_kws={"fill": True})
 
-    lats_diffs = np.diff(lats)
-    lons_diffs = np.diff(lons)
-    lats_diffs_plot = graph_series("Latitude/Longitude Sequential Differences", lats_diffs, W=20)
-    lats_diffs_plot.plot(lons_diffs)
+    # lats_diffs = np.diff(lats)
+    # lons_diffs = np.diff(lons)
+    # lats_diffs_plot = graph_series("Latitude/Longitude Sequential Differences", lats_diffs, W=20)
+    # lats_diffs_plot.plot(lons_diffs)
+    #
+    # steps = []
+    # d = 1.75e-6
+    # sigma = lats_diffs.std()
+    # p = (sigma**2) / (d**2)
+    # offset = 0
+    # offsets = []
+    # for _ in range(len(lats_diffs)):
+    #     p_step = random.uniform(0, 1)
+    #     # print('p_step = {}'.format(p_step))
+    #     if p_step <= p:
+    #         # print('\tDo step')
+    #         p_dir = random.uniform(0, 1)
+    #         if p_dir < 0.5:
+    #             steps.append(d)
+    #             offset += d
+    #         else:
+    #             steps.append(-d)
+    #             offset -= d
+    #     else:
+    #         steps.append(0)
+    #     offsets.append(offset)
+    # steps = np.array(steps)
+    # offsets = np.array(offsets)
+    # print('sigma = {}, p = {}, sigma_est = {}'.format(sigma, p, steps.std()))
+    #
+    # lats_diffs_plot.plot(steps, alpha=0.25)
+    # random_walk_plot = graph_series("Random Walk Error", offsets)
+    #
+    # alts_diffs = np.diff(alts)
+    # alts_diffs_plot = graph_series("Altitude Sequential Differences", alts_diffs, W=20)
 
-    steps = []
-    d = 1.75e-6
-    sigma = lats_diffs.std()
-    p = (sigma**2) / (d**2)
-    offset = 0
-    offsets = []
-    for _ in range(len(lats_diffs)):
-        p_step = random.uniform(0, 1)
-        # print('p_step = {}'.format(p_step))
-        if p_step <= p:
-            # print('\tDo step')
-            p_dir = random.uniform(0, 1)
-            if p_dir < 0.5:
-                steps.append(d)
-                offset += d
-            else:
-                steps.append(-d)
-                offset -= d
-        else:
-            steps.append(0)
-        offsets.append(offset)
-    steps = np.array(steps)
-    offsets = np.array(offsets)
-    print('sigma = {}, p = {}, sigma_est = {}'.format(sigma, p, steps.std()))
-
-    lats_diffs_plot.plot(steps, alpha=0.25)
-    random_walk_plot = graph_series("Random Walk Error", offsets)
-
-    alts_diffs = np.diff(alts)
-    alts_diffs_plot = graph_series("Altitude Sequential Differences", alts_diffs, W=20)
+    #
+    # Handle ECEF
+    #
+    xs = []
+    ys = []
+    zs = []
+    for llh in zip(lats, lons, alts):
+        xyz = coordinates.LLHToECEF(llh)
+        xs.append(xyz[0])
+        ys.append(xyz[1])
+        zs.append(xyz[2])
+    xs = np.array(xs)
+    ys = np.array(ys)
+    zs = np.array(zs)
+    # xs_plot = graph_series("X", xs)
+    # ys_plot = graph_series("Y", ys)
+    # zs_plot = graph_series("Z", zs)
+    ts = list(range(len(xs)))
+    plotECEF(ts, xs, ys, zs)
 
     plt.show()

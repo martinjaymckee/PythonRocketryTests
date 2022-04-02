@@ -39,6 +39,47 @@ def calcAdjustableLT3086Resistors(Vdac, Vouts, Vref=0.4, Iset=50e-6, Rb=None, do
     return Ra, Rb, Rdac
 
 
+# ADS1260 Design
+class ADS126x:
+    __gains = [1, 2, 4, 8, 16, 32, 64, 128]
+
+    def __init__(self, AVdd, AVss=0, gain=1):
+        self.__AVdd = AVdd
+        self.__AVss = AVss
+        self.gain = gain
+
+    @property
+    def Vref(self):
+        return 2.5
+
+    @property
+    def gain(self):
+        return self.__gain
+
+    @gain.setter
+    def gain(self, val):
+        if val in ADS126x.__gains:
+            self.__gain = val
+        return self.gain
+
+    @property
+    def vin_diff(self):
+        v = self.Vref / self.gain
+        return (-v, v)
+
+    @property
+    def vin_abs(self): # TODO: FIGURE OUT HOW TO MAKE THIS CORRECT
+        if self.gain == 1:
+            return (self.__AVss - 0.1, self.__AVdd + 0.1)
+        _, Vin = self.vin_diff
+        Voff = (Vin * (self.gain - 1) / 2.0)
+        print('Voffset = {}'.format(Voff))
+        Vin_p = self.__AVdd - 0.3 - Voff
+        Vin_n = self.__AVss + 0.3 + Voff
+        return (Vin_n, Vin_p)
+
+
+
 if __name__ == '__main__':
 
     Vin = 5
@@ -58,4 +99,10 @@ if __name__ == '__main__':
 
     calcAdjustableLT3086Resistors(2.5, (0.4, 9), doplot=True)
 
-    plt.show()
+    # plt.show()
+
+    adc = ADS126x(2.5, -2.5)
+    adc.gain = 128
+    print('ADC gain = {}'.format(adc.gain))
+    print('ADC differential input voltage = {}'.format(adc.vin_diff))
+    print('ADC absolute input voltage = {}'.format(adc.vin_abs))

@@ -1,6 +1,9 @@
 import math
 
 
+import numpy as np
+
+
 class GRS80:
     def __init__(self):
         self.__a = 6378137  # m
@@ -40,18 +43,19 @@ class WGS84:
     @property
     def e2_prime(self): return self.__e2_prime
 
-
+# TODO: CONVERT TO WORKING WITH NP ARRAYS
 def LLHToECEF(llh, ellipsoid=WGS84()):
     lat, lon, h = llh
-    lat = math.radians(lat)
-    lon = math.radians(lon)
-    N = ellipsoid.a / math.sqrt(1 - ellipsoid.e2 * (math.sin(lat)**2))
-    x = (N + h) * math.cos(lat) * math.cos(lon)
-    y = (N + h) * math.cos(lat) * math.sin(lon)
+    lat = np.radians(lat)
+    lon = np.radians(lon)
+    N = ellipsoid.a / np.sqrt(1 - ellipsoid.e2 * (np.sin(lat)**2))
+    x = (N + h) * np.cos(lat) * np.cos(lon)
+    y = (N + h) * np.cos(lat) * np.sin(lon)
     z = ((1 - ellipsoid.e2) * N + h) * math.sin(lat)
     return (x, y, z)
 
 
+# TODO: CONVERT TO WORKING WITH ARRAYS...
 def ECEFToLLH(ecef, ellipsoid=WGS84(), algo='Newton-Raphson', iters=4):
     def calcN(lat):
         return ellipsoid.a / math.sqrt(1 - ellipsoid.e2 * (math.sin(lat)**2))
@@ -78,15 +82,15 @@ def ECEFToLLH(ecef, ellipsoid=WGS84(), algo='Newton-Raphson', iters=4):
         k = s + 1 + 1/s
         P = F / (3 * k**2 * G**2)
         Q = math.sqrt(1 + (2 * ellipsoid.e2**2 * P))
-        print('Q = {}'.format(Q))
+        # print('Q = {}'.format(Q))
         r0 = ((-P*ellipsoid.e2*p)/(1+Q)) + math.sqrt(0.5*ellipsoid.a**2*(1 + 1/Q) - ((P*(1-ellipsoid.e2)*z**2)/(Q*(1+Q)) - (0.5*P*p**2)))
-        print('r0 = {}'.format(r0))
+        # print('r0 = {}'.format(r0))
         U = math.sqrt((p - ellipsoid.e2*r0)**2 + z**2)
         V = math.sqrt((p - ellipsoid.e2*r0)**2 + (1-ellipsoid.e2)*z**2)
         z0 = (ellipsoid.b**2 * z) / (ellipsoid.a * V)
         h = U * (1 - (ellipsoid.b**2 / (ellipsoid.a * V)))
-        print('a = {}, b = {}, U = {}, V = {}'.format(ellipsoid.a, ellipsoid.b, U, V))
-        print('b^2 / aV = {}'.format((ellipsoid.b**2 / (ellipsoid.a * V))))
+        # print('a = {}, b = {}, U = {}, V = {}'.format(ellipsoid.a, ellipsoid.b, U, V))
+        # print('b^2 / aV = {}'.format((ellipsoid.b**2 / (ellipsoid.a * V))))
         lat = math.atan2((z + ellipsoid.e2_prime*z0), p)
         lon = math.atan2(y, x)
         return (math.degrees(lat), math.degrees(lon), h)

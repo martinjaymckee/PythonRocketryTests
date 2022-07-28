@@ -1,0 +1,7 @@
+[NonlinearityWeightCalibrator]
+	formula = A*L^2 + B*L*T + C*L + D*T + E
+	A = 6.883383e-14
+	B = -2.980232e-08
+	C = -3.8445e-06
+	D = -0.01220703
+	E = -0.0859375

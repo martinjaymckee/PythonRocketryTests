@@ -44,7 +44,7 @@ if __name__ == '__main__':
     # Mechanism Properties
     l_servo = 7/1000  # 10/1000  # m
     l_gimbal = 18/1000  # m
-
+    C_design = 0.1 # 10%
     # Calculations
     t_cycle, dtheta_max, ddtheta_max = gimbal_cycle_properties(f_cycle, gimbal_offset)
     mechanical_advantage = l_gimbal / l_servo
@@ -59,3 +59,8 @@ if __name__ == '__main__':
     print('Gimbal MOI = {} kg m^2'.format(I_gimbal))
     print('Available Torque = {} Nm'.format(Q_available))
     print('Required Torque = {} Nm'.format(Q_required))
+
+    print()
+
+    if Q_available >= Q_required:
+        print('This design will work')

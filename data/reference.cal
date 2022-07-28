@@ -1,0 +1,7 @@
+[ReferenceWeightCalibrator]
+	formula = A*L + B*T + C
+	load_range = (-201561.7, -99922.7)
+	temp_range = (36.0648, 36.15619)
+	A = -4.928923e-06
+	B = -0.003112793
+	C = -0.3805656

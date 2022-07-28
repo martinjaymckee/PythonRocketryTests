@@ -345,8 +345,8 @@ if __name__ == '__main__':
 
     deg_to_m = 40.075e6 / 360
     # filename = '../HPR/66mm_L2_1.csv'
-    filename = '../LPR/Black_Brant_VB_Mule_Wind_80.csv'
-    # filename = '../LPR/Black_Brant_VB_Mule_High_Altitude.csv'
+    #filename = '../LPR/Black_Brant_VB_Mule_Wind_80.csv'
+    filename = '../LPR/Black_Brant_VB_Mule_High_Altitude.csv'
 
     beacon_rate_kwargs = {'t_max': 5, 'l_max': 7.5, 'f_max': 4}
     tracker_source = OpenrocketGPSTrackerSource(filename, beacon_rate_kwargs=beacon_rate_kwargs)

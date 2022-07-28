@@ -1,0 +1,9 @@
+[NonlinearityWeightCalibrator]
+	formula = A*L^2 + B*L*T + C*L + D*T + E
+	load_range = (-287692.1, -100036.8)
+	temp_range = (37.23202, 38.81545)
+	A = 1.159073e-13
+	B = -8.381903e-09
+	C = -4.567206e-06
+	D = -0.003112793
+	E = -0.3710938

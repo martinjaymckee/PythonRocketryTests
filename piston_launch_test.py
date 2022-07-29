@@ -398,20 +398,24 @@ if __name__ == '__main__':
             t_deployment = t
             break
 
-    axs[0].plot(result.ts, result.xs, c='c', alpha=0.33)
+    axs[0].plot(result.ts, result.xs, c='c', alpha=0.33, label='height')
     axs[0].axvline(result.t_launch, c='m', alpha=0.2)
     axs[0].axvline(result.t_liftoff_detection, c='r', alpha=0.8)
     axs[0].axvline(result.t_ascent, c='m', alpha=0.2)
     axs[0].axvline(result.t_burnout_detection, c='c', alpha=0.8)
     axs[0].axvline(engine.burn_time, c='k', alpha=0.8)
     axs[0].axvline(t_deployment, c='k', alpha=0.8)
+    axs[0].set_ylabel('Altitude m (cyan)')
     ax2 = axs[0].twinx()
-    ax2.plot(result.ts, result.dxs, c='g', alpha=0.33)
+    ax2.plot(result.ts, result.dxs, c='g', alpha=0.33, label='velocity')
+    ax2.set_ylabel('Velocity m/s (green)')
     axs[1].plot(result.ts, result.Fs, c='c', alpha=0.33)
     axs[1].axvline(result.t_burnout_detection, c='c', alpha=0.8)
     axs[1].axvline(t_deployment, c='k', alpha=0.8)
+    axs[1].set_ylabel('Thrust N (black)')
     ax3 = axs[1].twinx()
     ax3.plot(result.ts, result.ddxs, c='g', alpha=0.33)
+    ax3.set_ylabel('Acceleration m s^-2 (green)')
     # Fs = np.array(result.Fs)
     # Fs_eff = np.array(result.Fs_eff)
     # Fs_additional = Fs_eff - Fs

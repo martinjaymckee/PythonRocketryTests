@@ -388,9 +388,8 @@ if __name__ == '__main__':
     result = simulatePistonLaunch(dt, piston_ref, 0.0223, engine)
 
     v_descent = 4.77
-    fig, axs = plt.subplots(2, figsize=(18,12), sharex=True)
-    #fig.tight_layout()
-
+    fig, axs = plt.subplots(2, figsize=(18,12), sharex=True, constrained_layout=True)
+    
     idx = 0
     t_deployment = 0
     for idx, t in enumerate(result.ts):
@@ -409,6 +408,7 @@ if __name__ == '__main__':
     ax2 = axs[0].twinx()
     ax2.plot(result.ts, result.dxs, c='g', alpha=0.33, label='velocity')
     ax2.set_ylabel('Velocity m/s (green)')
+    
     axs[1].plot(result.ts, result.Fs, c='c', alpha=0.33)
     axs[1].axvline(result.t_burnout_detection, c='c', alpha=0.8)
     axs[1].axvline(t_deployment, c='k', alpha=0.8)
@@ -416,13 +416,17 @@ if __name__ == '__main__':
     ax3 = axs[1].twinx()
     ax3.plot(result.ts, result.ddxs, c='g', alpha=0.33)
     ax3.set_ylabel('Acceleration m s^-2 (green)')
+    
     # Fs = np.array(result.Fs)
     # Fs_eff = np.array(result.Fs_eff)
     # Fs_additional = Fs_eff - Fs
-    # axs[2].plot(result.ts, result.Fs, c='c', alpha=0.33)
-    # axs[2].plot(result.ts, result.Fs_eff, c='g', alpha=0.33)
+    # # axs[2].plot(result.ts, result.Fs, c='c', alpha=0.33)
+    # axs[2].plot(result.ts, result.Fs_eff, c='c', alpha=0.33)
+    # axs[2].set_ylabel('Force Effective N (cyan)')
     # ax4 = axs[2].twinx()
-    # ax4.plot(result.ts, Fs_additional, c='m', alpha=0.33)
+    # ax4.plot(result.ts, Fs_additional, c='g', alpha=0.33)
+    # ax4.set_ylabel('Force Additional N (green)')
+    
     x_apogee = np.max(result.xs)
     P_max = np.nanmax(result.Ps)
     print('Maximum Altitude = {}'.format(x_apogee))

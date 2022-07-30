@@ -5,12 +5,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import gimbal
-import gimbal_pid
-import gimbal_planner
-import rocket_components as rc
+import test_gimbal_linearization as gimbal
+import pyrse.gimbal_pid as gimbal_pid
+import pyrse.gimbal_planner as gimbal_planner
+import pyrse.rocket_components as rc
 
 
+# NOTE: THERE ARE A NUMBER OF THINGS ABOUT THIS TEST THAT DON'T SEEM TO MATCH
+#   THE CURRENT USE OF THE PYRSE PACKAGE AND SHOULD, POTENTIALLY, BE RETHOUGHT
 class TestRotationModel:
     @classmethod
     def __generate_random_params(cls, f_base, terms=5, amplitude_base=1):
@@ -347,7 +349,7 @@ def plotGimbalTest(title, fs, ts, refs, calcs, cmds, domega_limit=None):
 
 
 if __name__ == '__main__':
-    import gimbal_model
+    import pyrse.gimbal_model as gimbal_model
     fs = 75
     t_max = 30
     f_base = 0.25

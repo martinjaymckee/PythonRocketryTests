@@ -2,19 +2,19 @@ import copy
 
 import numpy as np
 
-import engines
-import rocket_components
+import pyrse.engines as engines
+import pyrse.rocket_components as rocket_components
 
 
 def getFullStackShuttleModel():
     cardboard = rocket_components.Material('Cardboard', 1.0)  # TODO: SET THE CORRECT MATERIAL
     foam = rocket_components.Material('Readiboard', 1.0)  # TODO: SET THE CORRECT MATERIAL
 
-    engs = engines.EngineDirectory('./engines')
+    engs = engines.EngineDirectory('./Engines')
 
-    orbiter_engine = engs.load('AeroTech', 'D2.3T')
-    srb_right_engine = engs.load('Quest', 'C6')
-    srb_left_engine = engs.load('Quest', 'C6')
+    orbiter_engine = engs.load_first('Aerotech', 'D2.3')
+    srb_right_engine = engs.load_first('Quest', 'C6-0')
+    srb_left_engine = srb_right_engine.duplicate()
 
     orbiter = rocket_components.EmptyComponent()
     external_tank = rocket_components.EmptyComponent()

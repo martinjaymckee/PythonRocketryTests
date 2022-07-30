@@ -15,7 +15,7 @@ import scipy
 import scipy.optimize
 import seaborn as sns
 
-import geodetic
+import pyrse.geodetic as geodetic
 
 debug_text = """
 0, 1, 0,        9,      9,      -21,    0,      2250,   2257,   37.999967974,   -104.000046857, 37.999964331,   -103.999986986, 0xD95D

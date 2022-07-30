@@ -2,8 +2,8 @@ import pid
 
 class AngleControlPID:
     def __init__(self, output_constraints=None):
-        self.__theta_pid = pid.PID(Kp=150, Ki=0, Kd=1.5, e=0.99)
-        self.__omega_pid = pid.PID(Kp=0.5, Ki=0, Kd=0.0, e=0.9)
+        self.__theta_pid = pid.PID(Kp=150, Ki=0, Kd=1.5)#, e=0.99)
+        self.__omega_pid = pid.PID(Kp=0.5, Ki=0, Kd=0.0)#, e=0.9)
         self.__output_constraints = output_constraints
 
     def __str__(self):

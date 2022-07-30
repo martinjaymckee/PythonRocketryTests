@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 
-import coordinates
+from . import coordinates
 
 
 def hav(x):

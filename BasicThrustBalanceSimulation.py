@@ -12,11 +12,13 @@ import numpy as np
 # import scipy
 # import scipy.interpolate
 
-import engines
-import rocket_components
+import pyrse.engines as engines
+import pyrse.environment as environment
+import pyrse.rocket_components as rocket_components
+import pyrse.utils
 
-orbiter_engine_file = '../Apogee_F10.eng'
-srb_engine_file = '../Cesaroni_F30.eng'
+orbiter_engine_file = 'Engines/Apogee_F10.rse'
+srb_engine_file = 'Engines/Cesaroni_73F30-6A.rse'
 
 
 def plotEngine(ax, ts, eng):
@@ -42,8 +44,9 @@ def getTWR(ship, t, engines):
     return T_tot / (9.80655 * ship.mass(t))
 
 
-def plotFlight(ts, configurations, engines):
-    env = rocket_components.Environment()
+def plotFlight(ts, configurations, engines, pos=None):
+    pos = pyrse.utils.GeographicPosition.LLH(38, 105, 2300)
+    env = environment.Environment(pos)
     g = 9.80655
     t_last = ts[0]
     v = 0
@@ -133,11 +136,11 @@ srb_left = rocket_components.AeroBody(.726, .066, .15, .295, pos=np.array([-.539
 srb_right = rocket_components.AeroBody(.726, .066, .15, .295, pos=np.array([-.539, 0.132, 0]))
 orbiter = rocket_components.AeroBody(.594, .099, .35, .31, pos=np.array([-.572, 0, .1375]))
 
-orbiter_engine = engines.Engine.RASP(orbiter_engine_file)
+orbiter_engine = engines.Engine.RSE(orbiter_engine_file)
 orbiter_engine.pos = np.array([-.242, 0, 0])
 
-srb_left_engine = engines.Engine.RASP(srb_engine_file)
-srb_right_engine = engines.Engine.RASP(srb_engine_file)
+srb_left_engine = engines.Engine.RSE(srb_engine_file)
+srb_right_engine = srb_left_engine.copy()  #engines.Engine.RASP(srb_engine_file)
 srb_offset = np.array([-.35, 0, 0])
 srb_right_engine.pos = np.array([-.35, 0, 0])
 srb_left_engine.pos = np.array([-.35, 0, 0])

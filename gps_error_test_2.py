@@ -48,7 +48,7 @@ def plotECEF(ts, xs, ys, zs, offset=5):
 
 
 if __name__ == '__main__':
-    import coordinates
+    import pyrse.coordinates as coordinates
     # import random
 
     W = 1.5

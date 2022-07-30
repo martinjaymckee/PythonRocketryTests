@@ -6,7 +6,7 @@ import numpy as np
 import numpy.linalg
 
 
-import mmoi_utils
+import pyrse.mmoi_utils as mmoi_utils
 
 
 def rotation_matrix(alpha, beta):

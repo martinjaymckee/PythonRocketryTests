@@ -946,11 +946,11 @@ if __name__ == '__main__':
     Tamb = T0 + 30
     Tset = T0 + 315
     # wire, pid_kws = HotWire('Nifethal 70', 30, 1.3), {'Kp': 0.8, 'Ki': 0.02}
-    wire, pid_kws = HotWire('316L', 30, 1.3), {'Kp': 2, 'Ki': 0.002, 'Kd': 0.075}  # {'Kp': 2.5, 'Ki': 0.01}
+    # wire, pid_kws = HotWire('316L', 30, 1.3), {'Kp': 2, 'Ki': 0.002, 'Kd': 0.075}  # {'Kp': 2.5, 'Ki': 0.01}
     # wire, pid_kws = HotWire('Nikrothal 60', 30, 1.3), {'Kp': 0.5, 'Ki': 0.02}
     # wire, pid_kws = HotWire('Nikrothal 80', 30, 1.3), {'Kp': 0.4, 'Ki': 0.015}
     # wire, pid_kws = HotWire('Kanthal A1', 28, 1.3), {'Kp': 0.25, 'Ki': 0.001, 'Kd': 0.025}  # {'Kp': 0.45, 'Ki': 0.015}
-    # wire, pid_kws = HotWire('Ni200', 30, 1.3), {'Kp': 0.7, 'Ki': 0.02}
+    wire, pid_kws = HotWire('Ni200', 30, 1.3), {'Kp': 0.7, 'Ki': 0.02}
     # wire, pid_kws = HotWire('Nifethal 52', 30, 1.3), {'Kp': 1.0, 'Ki': 0.02}
     # pid_kws = {'Kp': 0.1, 'Ki': 0.001, 'Kd': 0.01}
 

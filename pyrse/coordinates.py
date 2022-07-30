@@ -92,6 +92,12 @@ def ECEFToLLH(ecef, ellipsoid=WGS84, algo='Newton-Raphson', iters=4):
     return (0, 0, 0)
 
 
+# TODO: IMPLEMENT CONVERSION BETWEEN ECEF AND ENU COORDINATES USING THE FORMULAS
+#   PAGE IS Transformations between ECEF and ENU coordinates
+#   AVAILABLE AT https://gssc.esa.int/navipedia/index.php/Transformations_between_ECEF_and_ENU_coordinates#:~:text=From%20the%20figure%201%20it,axis%20with%20the%20z%2Daxis.
+#   ADDITIONAL INFO AT https://x-lumin.com/wp-content/uploads/2020/09/Coordinate_Transforms.pdf
+
+
 def DMSToDecDeg(deg, minutes=0, seconds=0):
     return deg + (minutes / 60.0) + (seconds / 3600.0)
 

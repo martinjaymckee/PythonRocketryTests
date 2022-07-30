@@ -300,13 +300,17 @@ class EngineDirectory:
                 manufacturer = EngineDirectory.__manufacturer_map[manufacturer]
             eng = self.__engines[(manufacturer.title(), model.upper())]
             if isinstance(eng, list):
-                # print([str(e) for e in eng])
                 return [e.duplicate() for e in eng if (src is None) or (e.src == src)]
-            # print(str(eng))
             return eng.duplicate() if (src is None) or (eng.src == src) else None
         except Exception as e:
             print(e)
         return None
+    
+    def load_first(self, manufacturer, model, src=None):
+        engs = self.load(manufacturer, model, src=src)
+        if isinstance(engs, list):
+            return engs[0]
+        return engs
 
 
 if __name__ == '__main__':

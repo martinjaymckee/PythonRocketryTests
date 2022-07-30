@@ -1,6 +1,6 @@
 import numpy as np
 
-import rocket_components as rc
+import pyrse.rocket_components as rc
 
 if __name__ == '__main__':
     body = rc.Component(mass=1)

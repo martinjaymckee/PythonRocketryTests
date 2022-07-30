@@ -47,7 +47,6 @@ if __name__ == '__main__':
     #
     # Testing Simulator
     #
-    # pad_pos = pyrse.utils.GeographicPosition.LLH(90, 0, 0) # North Pole
     pad_pos = pyrse.utils.GeographicPosition.LLH(38, -105, 2300)
     env = pyrse.environment.Environment(pad_pos)
     pad = pyrse.pad.LaunchPad(pad_pos)

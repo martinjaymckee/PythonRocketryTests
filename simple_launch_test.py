@@ -4,7 +4,7 @@ import random
 import matplotlib.pyplot as plt
 import numpy as np
 
-import engines
+import pyrse.engines as engines
 
 accel_fs = 100
 accel_sd = 5 * 130e-6 * accel_fs * 9.80665  # Five times LSM6DSM with bandwidth of accel_fs
@@ -197,9 +197,8 @@ if __name__ == '__main__':
     dt = 1/100
     m_rocket = 0.15  # kg
     v_launch = 15
-    engs = engines.load_engine_files('./engines')
-    print(engs)
-    eng = engs[("AeroTech", "D13W")]
+    engs = engines.EngineDirectory('./Engines')
+    eng = engs.load_first("Aerotech", "D13W")
 
     launch_detect = LaunchDetect(v_launch, t_buffer=0.64, N=32)
     burnout_detect = BurnoutDetect(-5, -20, e=0.9)

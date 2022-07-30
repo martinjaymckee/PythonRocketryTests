@@ -8,8 +8,8 @@ import pandas as pd
 import quaternion
 import seaborn as sns
 
-import coordinates
-import rotation_model
+from . import coordinates
+from . import rotation_model
 
 
 # TODO: ADD THE ABILITY TO READ VALUES FROM THIS BY RESAMPLING (AT ARBITRARY FREQUENCY) TO A BASE TYPE
@@ -132,9 +132,9 @@ def pitchIntegrate(data):
 
 
 if __name__ == '__main__':
-    filename = '18mm_Dual_Deploy_Sustainer.csv'
-    filename = '../LPR/Nartrek/Black_Brant_VB_Mule_D9.csv'
-    filename = '../LPR/Black_Brant_VB_Mule_Wind_80.csv'
+    filename = '../18mm_Dual_Deploy_Sustainer.csv'
+    filename = '../../LPR/Nartrek/Black_Brant_VB_Mule_D9.csv'
+    filename = '../../LPR/Black_Brant_VB_Mule_Wind_80.csv'
 
     parser = OpenRocketReader(filename)
     #

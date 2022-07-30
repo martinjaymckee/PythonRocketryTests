@@ -7,7 +7,7 @@ import numpy.linalg
 # import scipy
 # import scipy.interpolate
 
-import mmoi_utils
+from . import mmoi_utils
 
 
 class Aero:
@@ -237,4 +237,4 @@ class AeroBody(Component):  # TODO: THIS NEEDS TO BE REMOVED...
         self.__rho = 1.2754
 
     def calc_drag(self, v, env):
-        return 0.5 * env.air_density * self.__area * (v**2) * self.__cd
+        return 0.5 * env.density * self.__area * (v**2) * self.__cd

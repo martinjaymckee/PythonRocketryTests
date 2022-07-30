@@ -25,7 +25,7 @@ class EnvironmentSample:
     
 class Environment:
     def __init__(self, pos, T=288.15, P=101325, centripetal_correction=False, terrain=None):
-        self.__pos = None
+        self.__pos = pos
         self.__T = T
         self.__P = P
         self.__centripetal_correction = centripetal_correction

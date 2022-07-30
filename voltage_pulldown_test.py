@@ -1,4 +1,6 @@
 import math
+import os
+import os.path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -94,14 +96,14 @@ def plotVoltagePulldownData(ts, firing, Vbats, Vmcus, Vpyros, vars, Vcritical=3.
         ax.annotate(vars['description'], xy=(ts[int(len(ts)/20)], V), c='b')
 
 
-def plotVoltagePulldownTests(filenames, dt=1/300, Vcritical=3.65):
+def plotVoltagePulldownTests(filenames, dt=1/300, Vcritical=3.65, directory=''):
     if (filenames is None) or (len(filenames) < 1):
         return
     fig, axs = plt.subplots(len(filenames), figsize=(16, 9), sharex=True)
     if len(filenames) == 1:
         axs = [axs]
     for idx, filename in enumerate(filenames):
-        with open(filename, 'r') as file:
+        with open(os.path.join(directory, filename), 'r') as file:
             values = parseVoltagePulldownData(file, dt=dt)
             values[-1]['filename'] = filename
             plotVoltagePulldownData(*values, Vcritical=Vcritical, ax=axs[idx])
@@ -121,6 +123,8 @@ def estimateSourceResistance(Vpyros, Rl):
 
 
 if __name__ == '__main__':
+    directory = 'data'
+        
     filenames = [
         'voltage_pulldown_data_1.csv',
         'voltage_pulldown_data_2.csv',
@@ -142,7 +146,7 @@ if __name__ == '__main__':
     filenames = [
         'voltage_pulldown_data_7.csv'
     ]
-    plotVoltagePulldownTests(filenames)
+    plotVoltagePulldownTests(filenames, directory=directory)
     plt.show()
 
     filenames = [
@@ -153,7 +157,7 @@ if __name__ == '__main__':
 
     for (filename, Rl) in filenames:
         print('filename = {}, R1 = {}'.format(filename, Rl))
-        with open(filename, 'r') as file:
+        with open(os.path.join(directory, filename), 'r') as file:
             ts, firing, Vbats, Vmcus, Vpyros, vars = parseVoltagePulldownData(file)
             Rs, Il = estimateSourceResistance(Vpyros, Rl)
             print('Rs = {:0.4f} ohm, I = {:0.2f} A'.format(Rs, Il))

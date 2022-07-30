@@ -74,7 +74,7 @@ if __name__ == '__main__':
 
     test_samples = 150
     fs = 250
-    t_max = 60
+    t_max = 10
     t_cal=5
 
     bw_gyro = fs / 5
@@ -110,49 +110,49 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.show()
 
-    # lsm6dsm = GyroModel('LSM6DSM', max_bias=math.radians(2), sd_noise=math.radians(0.0038*bw_gyro))
-    # fig, axs = plt.subplots(2, 3, figsize=(15,12))
-    #
-    # x_errors = []
-    # y_errors = []
-    # z_errors = []
-    #
-    # for _ in range(test_samples):
-    #     gyro = GyroModel('BMX160', max_bias=math.radians(3), sd_noise=math.radians(0.007*bw_gyro))
-    #     gyro.calBias(fs, N=t_cal*fs)
-    #     ts, gyro_domegas, gyro_biases, gyro_noises = gyro.signal(fs, ts, domegas)
-    #     x_error = domegas[0] - gyro_domegas[0]
-    #     y_error = domegas[1] - gyro_domegas[1]
-    #     z_error = domegas[2] - gyro_domegas[2]
-    #     x_errors.append(np.mean(x_error))
-    #     y_errors.append(np.mean(y_error))
-    #     z_errors.append(np.mean(z_error))
-    #     sns.lineplot(x=ts, y=x_error, alpha=0.1, ax=axs[0][0])
-    #     sns.lineplot(x=ts, y=y_error, alpha=0.1, ax=axs[0][1])
-    #     sns.lineplot(x=ts, y=z_error, alpha=0.1, ax=axs[0][2])
-    # sns.distplot(np.array(x_errors), rug=True, hist=False, ax=axs[1][0])
-    # x_mean = np.mean(x_errors)
-    # x_sd = np.std(x_errors)
-    # axs[1][0].axvline(x_mean, c='k', alpha=0.33)
-    # axs[1][0].axvline(x_mean - 2*x_sd, c='g', alpha=0.33)
-    # axs[1][0].axvline(x_mean + 2*x_sd, c='g', alpha=0.33)
-    # axs[1][0].set_title('X-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(x_mean, x_sd))
-    #
-    # sns.distplot(np.array(y_errors), rug=True, hist=False, ax=axs[1][1])
-    # y_mean = np.mean(y_errors)
-    # y_sd = np.std(y_errors)
-    # axs[1][1].axvline(y_mean, c='k', alpha=0.33)
-    # axs[1][1].axvline(y_mean - 2*y_sd, c='g', alpha=0.33)
-    # axs[1][1].axvline(y_mean + 2*y_sd, c='g', alpha=0.33)
-    # axs[1][1].set_title('Y-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(y_mean, y_sd))
-    #
-    # sns.distplot(np.array(z_errors), rug=True, hist=False, ax=axs[1][2])
-    # z_mean = np.mean(z_errors)
-    # z_sd = np.std(z_errors)
-    # axs[1][2].axvline(z_mean, c='k', alpha=0.33)
-    # axs[1][2].axvline(z_mean - 2*z_sd, c='g', alpha=0.33)
-    # axs[1][2].axvline(z_mean + 2*z_sd, c='g', alpha=0.33)
-    # axs[1][2].set_title('Z-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(z_mean, z_sd))
-    #
-    # fig.tight_layout()
-    # plt.show()
+    lsm6dsm = GyroModel('LSM6DSM', max_bias=math.radians(2), sd_noise=math.radians(0.0038*bw_gyro))
+    fig, axs = plt.subplots(2, 3, figsize=(15,12))
+    
+    x_errors = []
+    y_errors = []
+    z_errors = []
+    
+    for _ in range(test_samples):
+        gyro = GyroModel('BMX160', max_bias=math.radians(3), sd_noise=math.radians(0.007*bw_gyro))
+        gyro.calBias(fs, N=t_cal*fs)
+        ts, gyro_domegas, gyro_biases, gyro_noises = gyro.signal(fs, ts, domegas)
+        x_error = domegas[0] - gyro_domegas[0]
+        y_error = domegas[1] - gyro_domegas[1]
+        z_error = domegas[2] - gyro_domegas[2]
+        x_errors.append(np.mean(x_error))
+        y_errors.append(np.mean(y_error))
+        z_errors.append(np.mean(z_error))
+        sns.lineplot(x=ts, y=x_error, alpha=0.1, ax=axs[0][0])
+        sns.lineplot(x=ts, y=y_error, alpha=0.1, ax=axs[0][1])
+        sns.lineplot(x=ts, y=z_error, alpha=0.1, ax=axs[0][2])
+    sns.distplot(np.array(x_errors), rug=True, hist=False, ax=axs[1][0])
+    x_mean = np.mean(x_errors)
+    x_sd = np.std(x_errors)
+    axs[1][0].axvline(x_mean, c='k', alpha=0.33)
+    axs[1][0].axvline(x_mean - 2*x_sd, c='g', alpha=0.33)
+    axs[1][0].axvline(x_mean + 2*x_sd, c='g', alpha=0.33)
+    axs[1][0].set_title('X-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(x_mean, x_sd))
+    
+    sns.distplot(np.array(y_errors), rug=True, hist=False, ax=axs[1][1])
+    y_mean = np.mean(y_errors)
+    y_sd = np.std(y_errors)
+    axs[1][1].axvline(y_mean, c='k', alpha=0.33)
+    axs[1][1].axvline(y_mean - 2*y_sd, c='g', alpha=0.33)
+    axs[1][1].axvline(y_mean + 2*y_sd, c='g', alpha=0.33)
+    axs[1][1].set_title('Y-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(y_mean, y_sd))
+    
+    sns.distplot(np.array(z_errors), rug=True, hist=False, ax=axs[1][2])
+    z_mean = np.mean(z_errors)
+    z_sd = np.std(z_errors)
+    axs[1][2].axvline(z_mean, c='k', alpha=0.33)
+    axs[1][2].axvline(z_mean - 2*z_sd, c='g', alpha=0.33)
+    axs[1][2].axvline(z_mean + 2*z_sd, c='g', alpha=0.33)
+    axs[1][2].set_title('Z-axis errors (mean={:0.2g}, s.d.={:0.2g})'.format(z_mean, z_sd))
+    
+    fig.tight_layout()
+    plt.show()

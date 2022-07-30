@@ -12,7 +12,7 @@ import numpy.polynomial
 import quaternion
 import seaborn as sns
 
-import rotation_model
+import pyrse.rotation_model as rotation_model
 import gyro_model
 
 #

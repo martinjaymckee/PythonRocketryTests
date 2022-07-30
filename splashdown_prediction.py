@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 import seaborn as sns
 
-import coordinates
-import geometry
+import pyrse.coordinates as coordinates
+import pyrse.geometry as geometry
 
 
 def getIntersectionPlane(llh, distance=100):
@@ -295,7 +295,7 @@ def estimatedApogeeTime(beacons):
 
 if __name__ == '__main__':
     import gps_error_model
-    import openrocket_api
+    import pyrse.openrocket_api as openrocket_api
 
     class OpenrocketGPSTrackerSource:
         def __init__(self, filename, beacon_rate_kwargs={}, gps_err_kwargs={}, noError=False):

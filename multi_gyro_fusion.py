@@ -212,8 +212,8 @@ def filterOptimization(fs, t_run, gyro0, gyro1, filter_gen, param_range=(.01, 10
 
 
 if __name__ == '__main__':
-    # import seaborn as sns
-    # plt.style.use('seaborn-colorblind')
+    import seaborn as sns
+    plt.style.use('seaborn-colorblind')
 
     fs = 3200
     f_servo = 250
@@ -231,50 +231,50 @@ if __name__ == '__main__':
 #        return FusionAlphaBetaFilter.Optimal(dt, max(param, 1e-6), math.radians(0.007*bw_gyro)**2, math.radians(0.0038*bw_gyro)**2)
 #    filterOptimization(fs, t_run, bmx160, lsm6dsm, filter_gen)
 
-    # fab_filt = FusionAlphaBetaFilter.Optimal(dt, 10, math.radians(0.007*bw_gyro)**2, math.radians(0.0038*bw_gyro)**2)
-    # simple_filt = SimpleFusionFilter(w=0.85)
+    fab_filt = FusionAlphaBetaFilter.Optimal(dt, 10, math.radians(0.007*bw_gyro)**2, math.radians(0.0038*bw_gyro)**2)
+    simple_filt = SimpleFusionFilter(w=0.85)
     #
     ts, domegas = generateCleanSignal(t_run, N=int(t_run*fs))
     ts_cal, domegas_cal = generateCalibrationSignal(t_cal, N=int(t_cal*fs))
     #
     #
-    # bmx160_domegas, bmx160_biases, bmx160_bias_est, bmx160_sd_est = runGyroTest(fs, bmx160, t_cal, ts, domegas)
-    # lsm6dsm_domegas, lsm6dsm_biases, lsm6dsm_bias_est, lsm6dsm_sd_est = runGyroTest(fs, lsm6dsm, t_cal, ts, domegas)
-    # fab_filtered_domegas = filterGyroResults(fab_filt, bmx160_domegas, lsm6dsm_domegas)
-    # simple_filtered_domegas = filterGyroResults(simple_filt, bmx160_domegas, lsm6dsm_domegas)
-    #
-    # bmx160_errors, bmx160_mean_error, bmx160_error_sd, bmx160_delay = calculateError(dt, ts, domegas, bmx160_domegas)
-    # lsm6dsm_errors, lsm6dsm_mean_error, lsm6dsm_error_sd, lsm6dsm_delay = calculateError(dt, ts, domegas, lsm6dsm_domegas)
-    # fab_filtered_errors, fab_filtered_mean_error, fab_filtered_error_sd, fab_filtered_delay = calculateError(dt, ts, domegas, fab_filtered_domegas)
-    # simple_filtered_errors, simple_filtered_mean_error, simple_filtered_error_sd, simple_filtered_delay = calculateError(dt, ts, domegas, simple_filtered_domegas)
-    #
-    # print('BMX160 Delay = {:0.2f} ms'.format(1000*bmx160_delay))
-    # print('LSM6DSM Delay = {:0.2f} ms'.format(1000*lsm6dsm_delay))
-    # print('Fusion Alpha-Beta Filtered Delay = {:0.2f} ms'.format(1000*fab_filtered_delay))
-    # print('Simple Fusion Filtered Delay = {:0.2f} ms'.format(1000*simple_filtered_delay))
-    # print('Servo Update Period = {:0.2f} ms'.format(1000*(1.0 / f_servo)))
-    #
-    # print('\n')
-    # print('BMX160 S.D. = {:0.3f} rad/s'.format(bmx160_error_sd))
-    # print('LSM6DSM S.D. = {:0.3f} rad/s'.format(lsm6dsm_error_sd))
-    # print('Fusion Alpha-Beta Filter S.D. = {:0.3f} rad/s'.format(fab_filtered_error_sd))
-    # print('Simple Fusion Filter S.D. = {:0.3f} rad/s'.format(simple_filtered_error_sd))
+    bmx160_domegas, bmx160_biases, bmx160_bias_est, bmx160_sd_est = runGyroTest(fs, bmx160, t_cal, ts, domegas)
+    lsm6dsm_domegas, lsm6dsm_biases, lsm6dsm_bias_est, lsm6dsm_sd_est = runGyroTest(fs, lsm6dsm, t_cal, ts, domegas)
+    fab_filtered_domegas = filterGyroResults(fab_filt, bmx160_domegas, lsm6dsm_domegas)
+    simple_filtered_domegas = filterGyroResults(simple_filt, bmx160_domegas, lsm6dsm_domegas)
+    
+    bmx160_errors, bmx160_mean_error, bmx160_error_sd, bmx160_delay = calculateError(dt, ts, domegas, bmx160_domegas)
+    lsm6dsm_errors, lsm6dsm_mean_error, lsm6dsm_error_sd, lsm6dsm_delay = calculateError(dt, ts, domegas, lsm6dsm_domegas)
+    fab_filtered_errors, fab_filtered_mean_error, fab_filtered_error_sd, fab_filtered_delay = calculateError(dt, ts, domegas, fab_filtered_domegas)
+    simple_filtered_errors, simple_filtered_mean_error, simple_filtered_error_sd, simple_filtered_delay = calculateError(dt, ts, domegas, simple_filtered_domegas)
+    
+    print('BMX160 Delay = {:0.2f} ms'.format(1000*bmx160_delay))
+    print('LSM6DSM Delay = {:0.2f} ms'.format(1000*lsm6dsm_delay))
+    print('Fusion Alpha-Beta Filtered Delay = {:0.2f} ms'.format(1000*fab_filtered_delay))
+    print('Simple Fusion Filtered Delay = {:0.2f} ms'.format(1000*simple_filtered_delay))
+    print('Servo Update Period = {:0.2f} ms'.format(1000*(1.0 / f_servo)))
+    
+    print('\n')
+    print('BMX160 S.D. = {:0.3f} rad/s'.format(bmx160_error_sd))
+    print('LSM6DSM S.D. = {:0.3f} rad/s'.format(lsm6dsm_error_sd))
+    print('Fusion Alpha-Beta Filter S.D. = {:0.3f} rad/s'.format(fab_filtered_error_sd))
+    print('Simple Fusion Filter S.D. = {:0.3f} rad/s'.format(simple_filtered_error_sd))
     #
     fig, axs = plt.subplots(3, figsize=(15, 12))
-    # sns.lineplot(ts, bmx160_domegas, ax=axs[0], lw=0.15)
-    # sns.lineplot(ts, lsm6dsm_domegas, ax=axs[0], lw=0.15)
-    # sns.lineplot(ts, fab_filtered_domegas, ax=axs[0], lw=1)
-    # sns.lineplot(ts, simple_filtered_domegas, ax=axs[0], lw=1)
-    axs[0].plot(ts, domegas, c='k', alpha=0.7, lw=0.5)
+    sns.lineplot(ts, bmx160_domegas, ax=axs[0], lw=0.15)
+    sns.lineplot(ts, lsm6dsm_domegas, ax=axs[0], lw=0.15)
+    sns.lineplot(ts, fab_filtered_domegas, ax=axs[0], lw=1)
+    sns.lineplot(ts, simple_filtered_domegas, ax=axs[0], lw=1)
+    # axs[0].plot(ts, domegas, c='k', alpha=0.7, lw=0.5)
     #
-    # sns.lineplot(ts, bmx160_errors, ax=axs[1], lw=0.15)
-    # sns.lineplot(ts, lsm6dsm_errors, ax=axs[1], lw=0.15)
-    # sns.lineplot(ts, fab_filtered_errors, ax=axs[1], lw=0.15)
-    # sns.lineplot(ts, simple_filtered_errors, ax=axs[1], lw=0.15)
+    sns.lineplot(ts, bmx160_errors, ax=axs[1], lw=0.15)
+    sns.lineplot(ts, lsm6dsm_errors, ax=axs[1], lw=0.15)
+    sns.lineplot(ts, fab_filtered_errors, ax=axs[1], lw=0.15)
+    sns.lineplot(ts, simple_filtered_errors, ax=axs[1], lw=0.15)
     #
-    # sns.distplot(bmx160_errors, ax=axs[2])
-    # sns.distplot(lsm6dsm_errors, ax=axs[2])
-    # sns.distplot(fab_filtered_errors, ax=axs[2])
-    # sns.distplot(simple_filtered_errors, ax=axs[2])
+    sns.distplot(bmx160_errors, ax=axs[2])
+    sns.distplot(lsm6dsm_errors, ax=axs[2])
+    sns.distplot(fab_filtered_errors, ax=axs[2])
+    sns.distplot(simple_filtered_errors, ax=axs[2])
     #
     plt.show()

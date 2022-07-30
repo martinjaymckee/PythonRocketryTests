@@ -1,3 +1,5 @@
+import ambiance
+import numpy as np
 
 import pyrse
 import pyrse.engines
@@ -47,14 +49,23 @@ if __name__ == '__main__':
     #
     # pad_pos = pyrse.utils.GeographicPosition.LLH(90, 0, 0) # North Pole
     pad_pos = pyrse.utils.GeographicPosition.LLH(38, -105, 2300)
-    env = pyrse.environment.Environment()
+    env = pyrse.environment.Environment(pad_pos)
     pad = pyrse.pad.LaunchPad(pad_pos)
-    model = None    
-    sim = pyrse.simulator.Simulator1D(env, pad, model)
+    model = None
+    sim = pyrse.simulator.Simulation1D(env, pad, model)
     print('Pad Surface Normal = {}'.format(sim.surface_normal))
-    g0 = env.g(pad_pos)
+    g0 = env.g()
     print('g0 (ECEF) = {}'.format(g0))
-    g0 = env.g(pad_pos, frame=None)    
-    print('g0 (mag) = {}'.format(g0))    
+    g0 = env.g(frame=None)    
+    print('g0 (mag) = {}'.format(g0))
+    atmos = ambiance.Atmosphere(2300)
+    g0 = atmos.grav_accel
+    print('g0 (mag - ambiance) = {}'.format(g0))
+    h = env.h
+    print('h = {}m'.format(h))
+    print('density = {} kg/m^3'.format(env.density))
+    print('kinematic viscosity = {} m^2 / s'.format(env.kinematic_viscosity))
+    print(env.sample())
+    # print('eps = {}'.format(np.finfo(type(1.0)).eps))    
     
     

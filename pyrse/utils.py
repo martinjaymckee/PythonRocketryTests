@@ -102,17 +102,17 @@ class GeographicPosition:
     default_position = np.array([0, 0, 0])
     
     @classmethod
-    def LLH(cls, lat, lon, h, ellipsoid = coordinates.WGS84()):
+    def LLH(cls, lat, lon, h, ellipsoid = coordinates.WGS84):
         # TODO: VALIDATE THE INPUTS AND CONVERT TO XYZ COORDINATES
         ecef = coordinates.LLHToECEF((lat, lon, h), ellipsoid=ellipsoid)
         return GeographicPosition(ecef, ellipsoid=ellipsoid)
     
     @classmethod
-    def ECEF(cls, x, y, z, ellipsoid = coordinates.WGS84()):
+    def ECEF(cls, x, y, z, ellipsoid = coordinates.WGS84):
         # TODO: IT WOULD BE GOOD TO VALIDATE THIS HERE....
         return GeographicPosition((x, y, z), ellpisoid=ellipsoid)
     
-    def __init__(self, src, ellipsoid = coordinates.WGS84(), fmt='ECEF', iters=10):
+    def __init__(self, src, ellipsoid = coordinates.WGS84, fmt='ECEF', iters=10):
         self.__ecef = np.array(GeographicPosition.default_position)
         self.__ellipsoid = ellipsoid
         self.__fmt = fmt
@@ -226,12 +226,12 @@ class GeographicPosition:
         raise PositionException('Position conversion error with invalid type {}'.format(type(src)))
         
 
-def heightAboveGeoid(pos):
+def heightAboveEllipsoid(pos):
     llh = pos.llh
-    return llh[0]
+    return llh[2]
 
     
 def heightAboveGround(pos, terrain=None):
     llh = pos.llh
     h_terrain = 0 if terrain is None else terrain.h(llh[0], llh[1])
-    return heightAboveGeoid(pos) - h_terrain
+    return heightAboveEllipsoid(pos) - h_terrain

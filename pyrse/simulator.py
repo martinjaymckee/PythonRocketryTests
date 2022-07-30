@@ -8,23 +8,26 @@ class SimulationException(Exception):
     def __init__(self, msg='Simulation Error'):
         Exception.__init__(self, msg)
         
-        
+
 class SimResult:
     def __init__(self, pos=None, vel=None, accel=None, orientation=None, rate=None):
         self.pos = utils.GeographicPosition() if pos is None else pos
         self.vel = utils.VelocityVector3D() if vel is None else vel
         self.accel = utils.AccelerationVector3D() if accel is None else accel
-        self.orientation = None  # TODO: INITIALIZE ORIENTATION
         self.rate = utils.AngularRateVector3D() if rate is None else rate
+        self.orientation = None  # TODO: INITIALIZE ORIENTATION
+        self.mmoi = None # TODO: INITIALIZE MASS MOMENT OF INERTIA        
+        self.mass = None # TODO: INITIALIZE MASS
+        self.forces = []
+        self.moments = []
+        self.environment = None
         
         
-class SimulatorCore:
-    def __init__(self, env, pad, models):
+class SimulationCore:
+    def __init__(self, env, pad, model):
         self.__env = env
         self.__pad = pad
-        if not (isinstance(models, list) or isinstance(models, tuple)):
-            models = [models]
-        self.__models = models
+        self.__models = [model]
 
     @property
     def environment(self):
@@ -49,24 +52,24 @@ class SimulatorCore:
         return pos2.ecef - self.__pad.pos.ecef
     
 
-class Simulator1D(SimulatorCore):
+class Simulation1D(SimulationCore):
 
     def __init__(self, env, pad, models):
-        SimulatorCore.__init__(self, env, pad, models)
-        print('Initialize 1D Simulator')
+        SimulationCore.__init__(self, env, pad, models)
+        print('Initialize 1D Simulation')
         self.__states = [np.array([0]*3)] * len(self.models)
         print('__states= {}'.format(self.__states))
         
     
         
-class Simulator3D(SimulatorCore):
+class Simulation3D(SimulationCore):
     def __init__(self, env, pad, model):
-        SimulatorCore.__init__(self, env, pad, model)
-        print('Initialize 3D Simulator')
+        SimulationCore.__init__(self, env, pad, model)
+        print('Initialize 3D Simulation')
         
 
-class Simulator6D(SimulatorCore):
+class Simulation6D(SimulationCore):
     def __init__(self, env, pad, model):
-        SimulatorCore.__init__(self, env, pad, model)        
-        print('Initialize 6D Simulator')
+        SimulationCore.__init__(self, env, pad, model)        
+        print('Initialize 6D Simulation')
         

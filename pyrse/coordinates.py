@@ -3,18 +3,27 @@ import math
 import numpy as np
 
 
-class GRS80:
-    def __init__(self):
-        self.__a = 6378137  # m
-        self.__b = 6356752.314140347  # m
-        self.__e2 = (self.__a**2 - self.__b**2) / (self.__a**2)
-        self.__e2_prime = (self.__a**2 - self.__b**2) / (self.__b**2)
+class Ellipsoid:
+    def __init__(self, a, b):
+        a, b = float(a), float(b)
+        self.__a = a  # m
+        self.__a2 = a * a
+        self.__b = b  # m
+        self.__b2= b * b
+        self.__e2 = (self.__a2 - self.__b2) / (self.__a2)
+        self.__e2_prime = (self.__a2 - self.__b2) / (self.__b2)
 
     @property
     def a(self): return self.__a
+    
+    @property
+    def a2(self): return self.__a2
 
     @property
     def b(self): return self.__b
+    
+    @property
+    def b2(self): return self.__b2
 
     @property
     def e2(self): return self.__e2
@@ -22,29 +31,12 @@ class GRS80:
     @property
     def e2_prime(self): return self.__e2_prime
 
+        
+GRS80 = Ellipsoid(6378137, 6356752.314140347)
+WGS84 = Ellipsoid(6378137, 6356752.314245)
+         
 
-class WGS84:
-    def __init__(self):
-        self.__a = 6378137  # m
-        self.__b = 6356752.314245  # m
-        self.__e2 = (self.__a**2 - self.__b**2) / (self.__a**2)
-        self.__e2_prime = (self.__a**2 - self.__b**2) / (self.__b**2)
-
-    @property
-    def a(self): return self.__a
-
-    @property
-    def b(self): return self.__b
-
-    @property
-    def e2(self): return self.__e2
-
-    @property
-    def e2_prime(self): return self.__e2_prime
-
-
-# TODO: CONVERT TO WORKING WITH NP ARRAYS
-def LLHToECEF(llh, ellipsoid=WGS84()):
+def LLHToECEF(llh, ellipsoid=WGS84):
     lat, lon, h = llh
     lat = np.radians(lat)
     lon = np.radians(lon)
@@ -55,10 +47,9 @@ def LLHToECEF(llh, ellipsoid=WGS84()):
     return (x, y, z)
 
 
-# TODO: CONVERT TO WORKING WITH ARRAYS...
-
-# TODO: GET THE CONVERSION TO WORK WITH THE POLES (NORTH AND SOUTH POLE, LATITUDE = +/- 90deg)
-def ECEFToLLH(ecef, ellipsoid=WGS84(), algo='Newton-Raphson', iters=4):
+# TODO: ADD IMPLMENTATION OF ENHANCED ZHU'S ALGORITHM FROM https://hal.archives-ouvertes.fr/hal-01704943v2/document
+#   Accurate Conversion of Earth-Fixed Earth-Centered Coordinates to Geodetic Coordinates -- Karl Osen
+def ECEFToLLH(ecef, ellipsoid=WGS84, algo='Newton-Raphson', iters=4):
     def calcN(lat):
         return ellipsoid.a / math.sqrt(1 - ellipsoid.e2 * (math.sin(lat)**2))
 
@@ -79,7 +70,7 @@ def ECEFToLLH(ecef, ellipsoid=WGS84(), algo='Newton-Raphson', iters=4):
         # Based on formulation on Wikipedia, variable names taken from there.
         #   Note: Currently, this is not working.  The latitude is approximately ~30m off, but the height is completely wrong.
         p = math.sqrt(x**2 + y**2)
-        F = 54 * ellipsoid.b**2 * z**2
+        F = 54 * ellipsoid.b2 * (z**2)
         G = p**2 + (1-ellipsoid.e2)*z**2 - ellipsoid.e2*(ellipsoid.a**2 - ellipsoid.b**2)
         c = (ellipsoid.e2**2 * F * p**2) / (G**3)
         s = pow((1 + c + math.sqrt(c**2 + 2*c)), 1/3)

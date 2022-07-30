@@ -8,7 +8,7 @@ import numpy as np
 import scipy
 import scipy.interpolate
 
-import rocket_components
+from . import rocket_components
 
 
 # TODO: ADD EQUALITY CHECK TO THE ENGINE OBJECT

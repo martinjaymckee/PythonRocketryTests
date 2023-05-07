@@ -27,7 +27,7 @@ if __name__ == '__main__':
     #
     # Control Values
     #
-    alt_max = 50e3
+    alt_max = 150e3
     vel_max = 3*343
     vel_min = 0.25
     l_error = 2.5

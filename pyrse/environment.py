@@ -116,6 +116,13 @@ class Environment:
             self.__kinematic_viscosity
         )
         
-    
+    def copy(self):
+        return Environment(
+            self.__pos,
+            self.__T,
+            self.__P,
+            self.__centripetal_correction,
+            self.__terrain,
+        )    
     
 

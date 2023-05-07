@@ -1,7 +1,5 @@
 import math
 
-import numpy as np
-
 
 class Ellipsoid:
     def __init__(self, a, b):
@@ -38,18 +36,18 @@ WGS84 = Ellipsoid(6378137, 6356752.314245)
 
 def LLHToECEF(llh, ellipsoid=WGS84):
     lat, lon, h = llh
-    lat = np.radians(lat)
-    lon = np.radians(lon)
-    N = ellipsoid.a / np.sqrt(1 - ellipsoid.e2 * (np.sin(lat)**2))
-    x = (N + h) * np.cos(lat) * np.cos(lon)
-    y = (N + h) * np.cos(lat) * np.sin(lon)
+    lat = math.radians(lat)
+    lon = math.radians(lon)
+    N = ellipsoid.a / math.sqrt(1 - ellipsoid.e2 * (math.sin(lat)**2))
+    x = (N + h) * math.cos(lat) * math.cos(lon)
+    y = (N + h) * math.cos(lat) * math.sin(lon)
     z = ((1 - ellipsoid.e2) * N + h) * math.sin(lat)
     return (x, y, z)
 
 
 # TODO: ADD IMPLMENTATION OF ENHANCED ZHU'S ALGORITHM FROM https://hal.archives-ouvertes.fr/hal-01704943v2/document
 #   Accurate Conversion of Earth-Fixed Earth-Centered Coordinates to Geodetic Coordinates -- Karl Osen
-def ECEFToLLH(ecef, ellipsoid=WGS84, algo='Newton-Raphson', iters=4):
+def ECEFToLLH(ecef, ellipsoid=WGS84, algo='Newton-Raphson', iters=5):
     def calcN(lat):
         return ellipsoid.a / math.sqrt(1 - ellipsoid.e2 * (math.sin(lat)**2))
 
@@ -92,6 +90,48 @@ def ECEFToLLH(ecef, ellipsoid=WGS84, algo='Newton-Raphson', iters=4):
     return (0, 0, 0)
 
 
+def ECEFToENU(p1, p0, **kwargs):
+    llh = ECEFToLLH(p0, **kwargs)
+    
+    s_lat, c_lat = math.sin(math.radians(llh[0])), math.cos(math.radians(llh[0]))
+    s_lon, c_lon = math.sin(math.radians(llh[1])), math.cos(math.radians(llh[1]))
+
+    dx = p1[0] - p0[0]
+    dy = p1[1] - p0[1]    
+    dz = p1[2] - p0[2]
+    
+    print('dx = {}, dy = {}, dz = {}'.format(dx, dy, dz))
+    
+    x = (-s_lon * dx) + (c_lon * dy)
+    y = (-s_lat * c_lon * dx) + (-s_lat * s_lon * dy) + (c_lat * dz)
+    z = (c_lat * c_lon * dx) + (c_lat * s_lon * dy) + (s_lat * dz)
+    
+    return (x, y, z)
+
+
+def ENUToECEF(enu, p0, **kwargs):
+    llh = ECEFToLLH(p0, **kwargs)
+    
+    s_lat, c_lat = math.sin(math.radians(llh[0])), math.cos(math.radians(llh[0]))
+    s_lon, c_lon = math.sin(math.radians(llh[1])), math.cos(math.radians(llh[1]))
+   
+    x = (-s_lon * enu[0]) + (-s_lat * c_lon * enu[1]) + (c_lat * c_lon * enu[2])
+    y = (c_lon * enu[0]) + (-s_lat * s_lon * enu[1]) + (c_lat * s_lon * enu[2])
+    z = (c_lat * enu[1]) + (s_lat * enu[2])
+    
+    return (x + p0[0], y + p0[1], z + p0[2])
+
+
+def LLHToENU(llh, p0, **kwargs):
+    ecef = LLHToECEF(llh, **kwargs)
+    return ECEFToLLH(ecef, **kwargs)
+
+
+def ENUToLLH(enu, p0, **kwargs):
+    ecef = ENUToECEF(enu, p0, **kwargs)
+    return ECEFToLLH(ecef, **kwargs)
+
+
 # TODO: IMPLEMENT CONVERSION BETWEEN ECEF AND ENU COORDINATES USING THE FORMULAS
 #   PAGE IS Transformations between ECEF and ENU coordinates
 #   AVAILABLE AT https://gssc.esa.int/navipedia/index.php/Transformations_between_ECEF_and_ENU_coordinates#:~:text=From%20the%20figure%201%20it,axis%20with%20the%20z%2Daxis.
@@ -111,7 +151,6 @@ def DecDegToDMS(deg):
 
 
 if __name__ == '__main__':
-    import numpy as np
     deg_to_m = 40.075e6 / 360
 
     lat = 38
@@ -123,10 +162,12 @@ if __name__ == '__main__':
     # ecef_tgt = (-2467178.313, -4674384.341, 3558322.813)
     # ecef_tgt = (-1217.741e3, -4884.092e3, 3906.367e3)
     ecef_tgt = (-1217740.797, -4884091.569, 3906367.461)
-    ecef_err = np.array(ecef_tgt) - np.array(ecef)
+    ecef_err = ((ecef_tgt[0] - ecef[0]), (ecef_tgt[1] - ecef[1]), (ecef_tgt[2] - ecef[2]))
     llh_convert = ECEFToLLH(ecef)
 
-    llh_err = np.array(llh) - np.array(llh_convert)
+ #   print(ecef, llh_convert)
+    
+    llh_err = ((llh[0] - llh_convert[0]), (llh[1] - llh_convert[1]), (llh[2] - llh_convert[2]))    
     print('Using WGS84, LLH({} deg, {} deg, {} m) ->\tECEF({} m, {} m, {} m)'.format(*llh, *ecef))
     print("\tECEF Error -> ({} m, {} m, {} m)".format(*ecef_err))
     print()
@@ -139,3 +180,14 @@ if __name__ == '__main__':
     print(deg)
     d1, m1, s1 = DecDegToDMS(deg)
     print("{}deg {}' {}\"".format(d1, m1, s1))
+    
+    lat = 38.0001
+    lon = -104.0001
+    h = 1500.5
+    llh2 = (lat, lon, h)
+    ecef2 = LLHToECEF(llh2)
+    enu = ECEFToENU(ecef2, ecef)
+    ecef3 = ENUToECEF(enu, ecef)
+    print('p0 = {}, p1 = {}'.format(ecef, ecef2))
+    print('ENU(p1, p0) = {} -> ECEF = {}'.format(enu, ecef3))
+

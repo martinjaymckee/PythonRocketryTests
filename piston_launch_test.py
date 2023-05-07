@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import engines
+import pyrse.engines as engines
 
 
 plt.style.use('seaborn-colorblind')

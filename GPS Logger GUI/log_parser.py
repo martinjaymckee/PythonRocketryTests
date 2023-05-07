@@ -17,8 +17,8 @@ def crc16_ccitt_false(data, crc=0xFFFF):
 
 import random
 class VirtualLogGenerator:
-    def __init__(self):
-        self.__sample = 0
+    def __init__(self, N=100):
+        self.__sample = N-1
         self.__temp = 30
         self.__temp_sd = 0.1
         self.__vsense = 6.7
@@ -26,7 +26,8 @@ class VirtualLogGenerator:
         self.__page_status = 0xFA
         self.__rssi = -123
         self.__rssi_sd = 1.5
-        self.__logger_pos = (35, -105, 2700)
+        self.__gps1_pos = (35, -105, 2700)
+        self.__gps2_pos = (35, -105, 2700)
         self.__base_pos = (35, -105, 2500)
         self.__lat_lon_sd = 1e-3
         self.__alt_sd = 1
@@ -43,7 +44,10 @@ class VirtualLogGenerator:
     def last(self):
         return self.__last_log_line
 
-    def next(self):  # TODO: NEED TO ADD ERRORS TO THE GENERATED OUTPUT
+    def next(self):
+        if self.__sample < 0:
+            return None
+        
         line = '{},'.format(self.__sample)
         if (self.__sample % 10) == 0:
             line += '{:0.4f},'.format(random.gauss(self.__temp, self.__temp_sd))
@@ -51,17 +55,23 @@ class VirtualLogGenerator:
             line += '0x{:02X},'.format(self.__page_status)
             line += '{:d},'.format(int(random.gauss(self.__rssi, self.__rssi_sd)))            
             
-            # Logger Pos
-            line += '{:0.9f},'.format(random.gauss(self.__logger_pos[0], self.__lat_lon_sd))
-            line += '{:0.9f},'.format(random.gauss(self.__logger_pos[1], self.__lat_lon_sd))
-            line += '{:0.9f},'.format(random.gauss(self.__logger_pos[2], self.__alt_sd))
+            # GPS1 Pos
+            line += '{:0.9f},'.format(random.gauss(self.__gps1_pos[0], self.__lat_lon_sd))
+            line += '{:0.9f},'.format(random.gauss(self.__gps1_pos[1], self.__lat_lon_sd))
+            line += '{:0.9f},'.format(random.gauss(self.__gps1_pos[2], self.__alt_sd))
+            
+            # GPS2 Pos
+            line += '{:0.9f},'.format(random.gauss(self.__gps2_pos[0], self.__lat_lon_sd))
+            line += '{:0.9f},'.format(random.gauss(self.__gps2_pos[1], self.__lat_lon_sd))
+            line += '{:0.9f},'.format(random.gauss(self.__gps2_pos[2], self.__alt_sd))
             
             # Base Pos
             line += '{:0.9f},'.format(random.gauss(self.__base_pos[0], self.__lat_lon_sd))
             line += '{:0.9f},'.format(random.gauss(self.__base_pos[1], self.__lat_lon_sd))
             line += '{:0.9f},'.format(random.gauss(self.__base_pos[2], self.__alt_sd))            
         else:
-            line += ',,,,,,,,,,'
+            line += ',,,,,,,,,,,,,'
+            
         # Accelerations
         line += '{:0.4f},'.format(random.gauss(self.__accel[0], self.__accel_sd))
         line += '{:0.4f},'.format(random.gauss(self.__accel[1], self.__accel_sd))
@@ -83,7 +93,7 @@ class VirtualLogGenerator:
         crc = crc16_ccitt_false(bytes(line, 'ascii'))
         line += '0x{:04X}\n'.format(crc)
 
-        self.__sample += 1
+        self.__sample -= 1
         self.__last_log_line = line
         
         return line
@@ -115,7 +125,8 @@ class LogSample:
         self.battery_voltage = None
         self.page_status = None
         self.rssi = None
-        self.logger_pos = [None] * 3
+        self.gps1_pos = [None] * 3
+        self.gps2_pos = [None] * 3
         self.base_pos = [None] * 3
         self.accels = [None] * 3
         self.gyros = [None] * 3
@@ -129,7 +140,8 @@ class LogSample:
             text += '{:0.3f},'.format(self.battery_voltage)
             text += '0x{:02X},'.format(self.page_status)
             text += '{:d},'.format(self.rssi)
-            text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.logger_pos)
+            text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.gps1_pos)
+            text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.gps2_pos)            
             text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.base_pos)
             text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.accels)
             text += '{:0.5f},{:0.5f},{:0.5f},'.format(*self.gyros)
@@ -143,8 +155,10 @@ class LogSample:
     
 class LogParser:
     class ParserStatistics:
-        def __init__(self):
+        def __init__(self, allow_skip=True, debug=False):
             self.reset()
+            self.__allow_skip = allow_skip
+            self.__debug = debug
         
         def __str__(self):
             return 'Parser Statistics: {} samples, {} segments, {} errors'.format(self.samples, self.segments, self.errors)
@@ -153,12 +167,14 @@ class LogParser:
             self.segments = 0
             self.errors = 0
             
-    def __init__(self, event_handler):
+    def __init__(self, event_handler, debug=False, allow_seq_gaps=False):
         self.__last_line = None
         self.__buffer = ''
         self.__event_handler = event_handler
         self.__last_log_sample = LogSample()
         self.__parser_statistics = LogParser.ParserStatistics()
+        self.__debug = debug
+        self.__allow_seq_gaps = allow_seq_gaps
         
     @property
     def statistics(self):
@@ -177,79 +193,91 @@ class LogParser:
                 segment = self.__buffer[:idx]
                 self.__buffer = self.__buffer[idx+1:]  # Copy remainder except for the '\n'
                 self.__parser_statistics.segments += 1
-                crc_valid = True  # TODO: RUN A CRC CHECK 
+                crc_valid = False
+                crc_idx = segment.rfind(',')
+                if not crc_idx == -1:
+                    try:
+                        calculated_crc = crc16_ccitt_false(bytes(segment[:crc_idx+1], 'ascii'))
+                        read_crc = int(segment[crc_idx+1:], 16)
+                        crc_valid = (calculated_crc == read_crc)                        
+                    except Exception as e:
+                        if self.__debug:
+                            print('Character Encoding Error')                        
+                        self.__event_handler.nack()
                 if crc_valid:
-#                    print(segment)
                     tokens = [t.strip() for t in segment.split(',')]
-#                    print('tokens -> {}'.format(tokens))
                     log_sample = LogSample()
                     try:
                         log_sample.sequence_id = int(tokens[0])
                         if self.__last_log_sample.sequence_id is None:
                             self.__last_log_sample.sequence_id = log_sample.sequence_id
-                        elif log_sample.sequence_id == self.__last_log_sample.sequence_id:
-                            # NOTE: IF THE SAMPLE IS THE SAME AS THE LAST CORRECTLY PARSED
-                            #   SAMPLE, THEN SIMPLY SEND AN ACK AND CONTINUE TO PARSING
-                            #   THE NEXT SAMPLE.
-                            print('Repeated Sample')
+                        elif log_sample.sequence_id >= self.__last_log_sample.sequence_id:
+                            if self.__debug:
+                                print('Repeated Sample')
                             if self.__event_handler is not None:
                                 self.__event_handler.ack()
-                                break
-                        elif log_sample.sequence_id > (self.__last_log_sample.sequence_id+1):
-                            print('Invalid Sequence Number')
+                            break
+                        elif (not self.__allow_seq_gaps) and (log_sample.sequence_id < (self.__last_log_sample.sequence_id-1)):
+                            if self.__debug:
+                                print('Invalid Sequence Number')
                             # TODO: NEED TO FIGURE OUT HOW TO HANDLE THIS SITUATION AS THE
                             #   CURRENT PROTOCOL DOESN'T HAVE ANY WAY TO TELL THE TRANSMITTER
                             #   THAT IT IS RUNNING AHEAD OF THE PARSER
                             self.__parser_statistics.errors += 1
                             if self.__event_handler is not None:
                                 self.__event_handler.nack()
-                                break
+                            break
 
                         log_sample.temperature = self.__update_value(float, tokens[1], 'temperature')
                         log_sample.battery_voltage = self.__update_value(float, tokens[2], 'battery_voltage')
                         log_sample.page_status = self.__update_value(lambda x: int(x, 16), tokens[3], 'page_status')
                         log_sample.rssi = self.__update_value(int, tokens[4], 'rssi')
                         
-                        log_sample.logger_pos[0] = self.__update_value(float, tokens[5], 'logger_pos', 0)                        
-                        log_sample.logger_pos[1] = self.__update_value(float, tokens[6], 'logger_pos', 1)
-                        log_sample.logger_pos[2] = self.__update_value(float, tokens[7], 'logger_pos', 2)
+                        log_sample.gps1_pos[0] = self.__update_value(float, tokens[5], 'gps1_pos', 0)                        
+                        log_sample.gps1_pos[1] = self.__update_value(float, tokens[6], 'gps1_pos', 1)
+                        log_sample.gps1_pos[2] = self.__update_value(float, tokens[7], 'gps1_pos', 2)
                         
-                        log_sample.base_pos[0] = self.__update_value(float, tokens[8], 'base_pos', 0)                        
-                        log_sample.base_pos[1] = self.__update_value(float, tokens[9], 'base_pos', 1)
-                        log_sample.base_pos[2] = self.__update_value(float, tokens[10], 'base_pos', 2)
+                        log_sample.gps2_pos[0] = self.__update_value(float, tokens[8], 'gps2_pos', 0)                        
+                        log_sample.gps2_pos[1] = self.__update_value(float, tokens[9], 'gps2_pos', 1)
+                        log_sample.gps2_pos[2] = self.__update_value(float, tokens[10], 'gps2_pos', 2)
                         
-                        log_sample.accels[0] = float(tokens[11])
-                        log_sample.accels[1] = float(tokens[12])
-                        log_sample.accels[2] = float(tokens[13])
+                        log_sample.base_pos[0] = self.__update_value(float, tokens[11], 'base_pos', 0)                        
+                        log_sample.base_pos[1] = self.__update_value(float, tokens[12], 'base_pos', 1)
+                        log_sample.base_pos[2] = self.__update_value(float, tokens[13], 'base_pos', 2)
                         
-                        log_sample.gyros[0] = float(tokens[14])
-                        log_sample.gyros[1] = float(tokens[15])
-                        log_sample.gyros[2] = float(tokens[16])
+                        log_sample.accels[0] = float(tokens[14])
+                        log_sample.accels[1] = float(tokens[15])
+                        log_sample.accels[2] = float(tokens[16])
                         
-                        log_sample.mags[0] = float(tokens[17])
-                        log_sample.mags[1] = float(tokens[18])
-                        log_sample.mags[2] = float(tokens[19])
+                        log_sample.gyros[0] = float(tokens[17])
+                        log_sample.gyros[1] = float(tokens[18])
+                        log_sample.gyros[2] = float(tokens[19])
                         
-                        log_sample.external_status = int(tokens[20], 16)
+                        log_sample.mags[0] = float(tokens[20])
+                        log_sample.mags[1] = float(tokens[21])
+                        log_sample.mags[2] = float(tokens[22])
                         
-#                        print(log_sample)
-#                        print()
+                        log_sample.external_status = int(tokens[23], 16)
                         
                         self.__parser_statistics.samples += 1
                         if self.__event_handler is not None:
                             self.__event_handler.ack()
-                        
+                        if log_sample.sequence_id == 0:
+                            done = True
+                            if self.__event_handler is not None:
+                                self.__event_handler.finished()                            
                         results.append(log_sample)
                         self.__last_log_sample = log_sample
                     except Exception as e:
-                        print('Parsing Error - {}'.format(e))
+                        if self.__debug:
+                            print('Parsing Error - {}'.format(e))
                         self.__parser_statistics.errors += 1                        
                         if self.__event_handler is not None:
-                            print('Parsing Error')
                             self.__event_handler.nack()
                     
                 else:
-                    print('CRC Invalid')      
+                    if self.__debug:
+                        print('CRC Invalid')      
                     self.__parser_statistics.errors += 1                    
                     if self.__event_handler is not None:
                         self.__event_handler.nack()
@@ -277,34 +305,43 @@ if __name__ == '__main__':
         def nack(self):
             print('NACK')
      
+        def finished(self):
+            print('Finished')
         
     class ResendingEventHandler:
         def __init__(self):
             self.resend = False
-        
+            self.done = False
+            
         def ack(self):
             self.resend = False
             
         def nack(self):
-            print('NACK sent, resend required')
+            #print('NACK sent, resend required')
             self.resend = True      
         
-
-    N = 20
+        def finished(self):     
+            self.done = True
+            
+    N = 150
     gen = VirtualLogGenerator()
     comms = VirtualCommChannel()
     event_handler = ResendingEventHandler()
     parser = LogParser(event_handler)
  
     samples = []
-    while len(samples) < N:
-        new_buffer = comms(gen.last() if event_handler.resend else gen.next())
+    while not event_handler.done and (len(samples) < N):
+        line = gen.last() if event_handler.resend else gen.next()
+        if line is None:
+            break
+        new_buffer = comms(line)
         new_samples = parser(new_buffer)
         samples += new_samples
-    
-    for sample in samples:
-        print(sample)
-        print()
+
+    print('samples[0] = {}'.format(samples[0]))    
+    # for sample in samples:
+    #     print(sample)
+    #     print()
         
     print(parser.statistics)
         

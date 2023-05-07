@@ -4,7 +4,7 @@ import PyQt5.QtWidgets as QtWidgets
 import PyQt5.QtSerialPort as QtSerialPort
 
 class SerialInfo:
-    default_bauds = [9600, 19200, 38400, 57600, 115200, 230400]
+    default_bauds = [9600, 19200, 38400, 57600, 115200, 230400, 460800]
 
 
 class SerialControl(QtWidgets.QWidget):
@@ -47,9 +47,9 @@ class SerialControl(QtWidgets.QWidget):
             self.__ser.close()
             self.__ser = None
             
-        if self.__auto_search_timer.isActive():
-            self.__auto_search_timer.stop()
-            del self.__auto_search_timer
+        # if self.__auto_search_timer.isActive():
+        #     self.__auto_search_timer.stop()
+        #     del self.__auto_search_timer
 
     @property
     def autosearch(self):

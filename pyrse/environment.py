@@ -3,8 +3,8 @@ import math
 import ambiance
 import numpy as np
 
-from . import numpy_utils as npu
-from . import utils
+from pyrse import numpy_utils as npu
+from pyrse import utils
 
 class EnvironmentException(Exception):
     def __init__(self, msg='Environment Error'):
@@ -38,7 +38,7 @@ class Environment:
         self.__R_avg = None
         self.__g = None
         self.__h = None
-        self.pos = pos
+        self.pos = pos.copy()
 
     @property
     def pos(self):
@@ -49,7 +49,7 @@ class Environment:
         if not isinstance(_pos, utils.GeographicPosition):
             raise utils.PositionException('Invalid position of type {}'.format(type(_pos)))
 
-        self.__pos = _pos
+        self.__pos = _pos.copy()
         
         #
         # Calculate Gravity

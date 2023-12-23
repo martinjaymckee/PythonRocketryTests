@@ -100,7 +100,7 @@ def ECEFToENU(p1, p0, **kwargs):
     dy = p1[1] - p0[1]    
     dz = p1[2] - p0[2]
     
-    print('dx = {}, dy = {}, dz = {}'.format(dx, dy, dz))
+#    print('dx = {}, dy = {}, dz = {}'.format(dx, dy, dz))
     
     x = (-s_lon * dx) + (c_lon * dy)
     y = (-s_lat * c_lon * dx) + (-s_lat * s_lon * dy) + (c_lat * dz)

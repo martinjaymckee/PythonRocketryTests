@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from . import coordinates
+from pyrse import coordinates
 
 class VectorException(Exception):
     def __init__(self, msg='Vector Error'):
@@ -36,6 +36,9 @@ class Vector3D:
     def ecef(self):
         return self.__vec
     
+    def enu(self, pos):
+        return coordinates.ECEFToENU(self.ecef, pos.ecef)
+    
     @property
     def x(self):
         return self.__vec[0]
@@ -64,8 +67,21 @@ class Vector3D:
         return self.z
     
     def copy(self):
-        return self.__class__(self.__vec) 
+        return self.__class__(np.array(self.__vec))
     
+    def __add__(self, v):
+        assert isinstance(v, self.__class__), 'Added value is of incompatible type {} for type {}'.format(type(v), type(self))
+        vec = self.__vec + v.ecef
+        return self.__class__(vec) #, label=self.__label, frame=self.__frame, units=self.__units)
+
+    def __radd__(self, v):
+        return self.__add__(v)
+   
+    def __iadd__(self, v):
+        assert isinstance(v, self.__class__), 'Added value is of incompatible type {} for type {}'.format(type(v), type(self))
+        self.__vec += v.ecef
+        return self    
+        
     
 class OffsetVector3D(Vector3D):
     @classmethod
@@ -78,25 +94,33 @@ class OffsetVector3D(Vector3D):
         # TODO: CONVERT TO ECEF VECTOR
         cls(None)
         
-    def __init__(self, vec):
+    def __init__(self, vec = (0, 0, 0)):
         Vector3D.__init__(self, vec, label='Offset', units='m')
         
     # TODO: ADD GETTERS AND SETTERS FOR LATITUDE, LONGITUDE AND HEIGHT
         
 class VelocityVector3D(Vector3D):
-    def __init__(self, vec):
+    def __init__(self, vec = (0, 0, 0)):
         Vector3D.__init__(self, vec, label='Velocity', units='m/s')
+
+    def timestep(self, dt):
+        return OffsetVector3D(dt * self.ecef)
 
 
 class AccelerationVector3D(Vector3D):
-    def __init__(self, vec):
+    def __init__(self, vec = (0, 0, 0)):
         Vector3D.__init__(self, vec, label='Acceleration', units='m/s^2')
 
-
+    def timestep(self, dt):
+        return VelocityVector3D(dt * self.ecef)
+                              
+                              
 class AngularRateVector3D(Vector3D):
-    def __init__(self, vec):
+    def __init__(self, vec = (0, 0, 0)):
         Vector3D.__init__(self, vec, label='AngularRate', units='rad/s')
-        
+    
+    def timestep(self, dt):
+        return VelocityVector3D(dt * self.ecef)
         
 class GeographicPosition:
     default_position = np.array([0, 0, 0])
@@ -112,23 +136,26 @@ class GeographicPosition:
         # TODO: IT WOULD BE GOOD TO VALIDATE THIS HERE....
         return GeographicPosition((x, y, z), ellpisoid=ellipsoid)
     
-    def __init__(self, src, ellipsoid = coordinates.WGS84, fmt='ECEF', iters=10):
+    def __init__(self, src = None, ellipsoid = coordinates.WGS84, fmt='ECEF', iters=10):
         self.__ecef = np.array(GeographicPosition.default_position)
         self.__ellipsoid = ellipsoid
         self.__fmt = fmt
         self.__iters = iters
-        if src is not None:
-           if isinstance(src, GeographicPosition):
-               self.__ecef = src.ecef.copy() 
-               self.__ellipsoid = src.ellipsoid
-               self.__fmt = src.fmt
-           elif isinstance(src, np.ndarray):
-               self.__ecef = src.copy()
-           elif len(src) == 3:
-               self.__ecef = np.array(src)
-           else:
-               self.__conversion_exception(src)
-
+        src = GeographicPosition.default_position if src is None else src
+        if isinstance(src, GeographicPosition):
+            self.__ecef = src.ecef.copy() 
+            self.__ellipsoid = src.ellipsoid
+            self.__fmt = src.fmt
+        elif isinstance(src, np.ndarray):
+            self.__ecef = src.copy()
+        elif len(src) == 3:
+            self.__ecef = np.array(src)
+        else:
+            self.__conversion_exception(src)
+             
+    def copy(self):
+        return self.__class__(self.__ecef, self.__ellipsoid, self.__fmt, self.__iters)
+    
     def __str__(self):
         def fmtDMS(deg):
             d, m, s = coordinates.DecDegToDMS(deg)
@@ -153,7 +180,10 @@ class GeographicPosition:
         return self.__add__(v)
     
     def __iadd__(self, v):
+        ecef = self.__ecef
         self.__ecef += np.array([v.x, v.y, v.z])
+        
+#        print('v = {}, Before ECEF = {}, After ECEF = {}'.format(v, ecef, self.__ecef))
         return self
     
     @property
@@ -189,6 +219,9 @@ class GeographicPosition:
         else:
             self.__conversion_exception(src)
         return self.ecef
+
+    def enu(self, p0):
+        return coordinates.ECEFToENU(self.ecef, p0.ecef)
     
     @property
     def x(self):

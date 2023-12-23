@@ -1,14 +1,18 @@
+import itertools
 import math
 import os
 import os.path
+import random
+import re
 import xml.etree
+import xml.etree.ElementTree
 
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy
 import scipy.interpolate
 
-from . import rocket_components
+from pyrse import rocket_components
 
 
 # TODO: ADD EQUALITY CHECK TO THE ENGINE OBJECT
@@ -61,7 +65,7 @@ class Engine(rocket_components.Component):
         engines = None
         if not root.tag == 'engine-database':
             return engines
-
+        exceptions = []
         for engine_list in root.findall('engine-list'):
             for engine_data in engine_list:
                 try:
@@ -78,8 +82,8 @@ class Engine(rocket_components.Component):
                     assert total_mass is not None, 'Engine file did not contain total mass'
                     prop_mass = engine_data.get('propWt')
                     assert prop_mass is not None, 'Engine file did not contain propellant mass'                    
-                    kwargs['propellent_mass'] = float(prop_mass)
-                    kwargs['empty_mass'] = float(total_mass) - kwargs['propellent_mass']
+                    kwargs['propellent_mass'] = float(prop_mass) / 1000.0
+                    kwargs['empty_mass'] = (float(total_mass) / 1000.0) - kwargs['propellent_mass']
                     comments_element = engine_data.find('comments')
                     kwargs['comments'] = None if comments_element is None else comments_element.text.replace('\n', ' ')
 
@@ -99,15 +103,21 @@ class Engine(rocket_components.Component):
                     engines.append(Engine(**kwargs))
                 except Exception as e:
                     print('Failure when parsing, {} - {}'.format(path, e))
+                    exceptions.append(e)
+        
+        if len(exceptions) > 0:
+            raise(exceptions[0])
+        
         if engines is None:
             return None
         return engines[0] if len(engines) == 1 else engines
     
-    def __init__(self, ts=[], Ts=[], manufacturer=None, model=None, diameter=None, length=None, delays=None, propellent_mass=0, empty_mass=0, t_start=0, comments=None, src=None):
+    def __init__(self, ts=[], Ts=[], manufacturer=None, model=None, diameter=None, length=None, delays=None, propellent_mass=0, empty_mass=0, t_start=None, comments=None, src=None):
         rocket_components.Component.__init__(self, np.array([0.0, 0.0, 0.0]), 0.0)
         # print(manufacturer, model)
         self.__ts = np.array(ts)
         self.__Ts = np.array(Ts)
+        
         self.__manufacturer = manufacturer.title()
         self.__model = model
         self.__delays = delays
@@ -123,14 +133,13 @@ class Engine(rocket_components.Component):
         self.__total_impulse = np.trapz(self.__Ts, self.__ts)
         self.__impulse_class = self.__get_impulse_class(self.__total_impulse)
         self.__thrust_spline = scipy.interpolate.UnivariateSpline(self.__ts, self.__Ts, s=0, k=1)
-        # self.__thrust_spline = scipy.interpolate.interp1d(self.__ts, self.__Ts, kind='cubic')
         self.__ueq = self.__total_impulse / self.__propellent_mass
 
     def __str__(self):
         if self.src is None:
             return 'Engine({} {})'.format(self.manufacturer, self.model)
         return 'Engine({} {} {})'.format(self.manufacturer, self.model, self.src)
-    
+
     @property
     def diameter(self): return self.__diameter
     
@@ -174,15 +183,23 @@ class Engine(rocket_components.Component):
     def src(self): return self.__src
     
     @property
+    def mass_fraction(self):
+        return 100 * self.propellent_mass / self.total_mass
+    
+    @property
     def delays(self): return self.__delays
     
+    @property
+    def reference_thrust_curve(self):
+        return self.__ts[:], self.__Ts
+
     def thrust(self, t):
-        if (t < self.__t_start) or (t > (self.__t_start + self.__t_burn)):
+        if (self.__t_start is None) or (t < self.__t_start) or (t > (self.__t_start + self.__t_burn)):
             return 0
         return self.__thrust_spline(t)
 
     def spent_impulse(self, t):
-        if t < self.__t_start:
+        if (self.__t_start is None) or (t < self.__t_start):
             return 0
         elif t > self.__t_start+self.__t_burn:
             return self.__total_impulse
@@ -202,6 +219,9 @@ class Engine(rocket_components.Component):
     def properties(self, t):
         pass
     
+    def start(self, t):
+        self.__t_start = t
+        
     def __get_impulse_class(self, total_impulse):
         if total_impulse <= 0.3125:
             return '1/8A'
@@ -217,26 +237,32 @@ class Engine(rocket_components.Component):
         return impulse_class
         # print('total_impulse = {}, N = {}, impulse class = {}'.format(total_impulse, N, impulse_class))
         
+    def Scaled(self, impulse_multiplier = 1, burn_rate_multiplier = 1, noise_sd=0):
+        thrust_multiplier = impulse_multiplier / burn_rate_multiplier
 
-# def load_engine_files(directory=None):
-#     directory = './' if directory is None else directory
-#     engines = {}
-#     for file in os.listdir(os.path.abspath(directory)):
-#         try:
-#             path = os.path.abspath(os.path.join(directory, file))
-#             name, ext = os.path.splitext(file)
-#             manufacturer, _, model = name.partition('_')
-#             if ext == '.eng':
-#                 eng = Engine.RASP(path, manufacturer=manufacturer)
-#                 engines[(manufacturer, model)] = eng
-#             elif ext == '.rse':
-#                 eng = Engine.RSE(path)
-#                 engines[(eng.manufacturer, eng.model)] = eng                
-#             else:
-#                 pass
-#         except Exception as e:
-#             print(e)
-#     return engines
+        new_ts = np.array([burn_rate_multiplier * t for t in self.__ts])        
+        new_Ts = []
+        noise_sd = noise_sd * np.max(self.__Ts)
+        for T in self.__Ts:
+            T_noise = 0 if noise_sd == 0 else random.gauss(0, noise_sd)
+            T = (thrust_multiplier * T) + T_noise
+            new_Ts.append(T)
+        new_Ts = np.array(new_Ts)
+        
+        return Engine(
+            new_ts, 
+            new_Ts, 
+            manufacturer=self.__manufacturer, 
+            model=self.__model, 
+            diameter=self.__diameter, 
+            length=self.__length, 
+            delays=self.__delays, 
+            propellent_mass=self.__propellent_mass, 
+            empty_mass=self.__empty_mass, 
+            t_start=self.__t_start, 
+            comments=('' if self.__comments is None else self.__comments) + ' --> Scaled with impulse = x {}, burn rate = x {}, thrust = x {}, std(noise) = {}'.format(impulse_multiplier, burn_rate_multiplier, thrust_multiplier, noise_sd), 
+            src=self.__src
+        )
 
 
 class EngineDirectory:
@@ -244,9 +270,11 @@ class EngineDirectory:
         'AT': 'Aerotech'
     }
 
-    def __init__(self, directory=None):
+    def __init__(self, directory=None, fail_on_parsing=False):
         self.__engines = {}
         self.__num_files = 0
+        self.__fail_on_parsing = fail_on_parsing
+        self.__model_regex = re.compile('[a-sA-S][1-9][0-9]*')
         directory = './' if directory is None else directory
         self.reload(directory, force_clean=True)
 
@@ -292,26 +320,73 @@ class EngineDirectory:
                         self.__engines[(eng.manufacturer, eng.model)] = eng                    
                         self.__num_files += 1                        
             except Exception as e:
-                print(e)
+                if self.__fail_on_parsing:
+                    raise(e)
 
-    def load(self, manufacturer, model, src=None):  # NOTE: THIS SHOULD ALSO CHECK FOR NEAR MATCHES
+    def load(self, manufacturer, model='', src=None, approx_match=True):  # NOTE: THIS SHOULD ALSO CHECK FOR NEAR MATCHES
         try:
-            if manufacturer in EngineDirectory.__manufacturer_map:
-                manufacturer = EngineDirectory.__manufacturer_map[manufacturer]
-            eng = self.__engines[(manufacturer.title(), model.upper())]
+            eng = None
+            if approx_match:
+                tokens = [t.strip() for t in manufacturer.split()]
+                manufacturer_tokens = []
+                model_tokens = []
+                for token in tokens:
+                    if self.__is_model(token):
+                        model_tokens.append(self.__strip_model(token).upper())
+                    if self.__is_manufacturer(token):
+                        manufacturer_tokens.append(token.title())
+                for manufacturer, model in itertools.product(manufacturer_tokens, model_tokens):
+                    for manufacturer_key, model_key in self.__engines.keys():
+                        if (manufacturer in manufacturer_key) and (model in model_key):
+                            new_eng = self.__engines[(manufacturer_key, model_key)]
+                            if eng is None:
+                                eng = new_eng
+                            elif isinstance(eng, list):
+                                eng.append(new_eng)
+                            else:
+                                eng = [eng, new_eng]
+            else:
+                if manufacturer in EngineDirectory.__manufacturer_map:
+                    manufacturer = EngineDirectory.__manufacturer_map[manufacturer]
+                eng = self.__engines[(manufacturer.title(), model.upper())]
             if isinstance(eng, list):
                 return [e.duplicate() for e in eng if (src is None) or (e.src == src)]
             return eng.duplicate() if (src is None) or (eng.src == src) else None
         except Exception as e:
-            print(e)
+            if self.__fail_on_parsing:
+                raise(e)
+
         return None
     
-    def load_first(self, manufacturer, model, src=None):
-        engs = self.load(manufacturer, model, src=src)
+    def load_first(self, manufacturer, model='', src=None, approx_match=True):
+        engs = self.load(manufacturer, model, src=src, approx_match=True)
         if isinstance(engs, list):
             return engs[0]
         return engs
 
+    def __is_model(self, model):
+        return self.__model_regex.match(model) is not None
+
+    def __strip_model(self, model):
+        model, _, delay = model.partition('-')
+        return model
+
+    def __is_manufacturer(self, manufacturer):
+        return True
+
+    
+class EngineRandomizer:
+    def __init__(self, ref_eng, impulse_range=0.005, burn_rate_range=0.0025, noise_sd=0.0005):
+        self.__ref_eng = ref_eng
+        self.__impulse_range = impulse_range
+        self.__burn_rate_range = burn_rate_range
+        self.__noise_sd = noise_sd
+        
+    def __call__(self):
+        impulse_multiplier = random.uniform(1-self.__impulse_range, 1+self.__impulse_range)
+        burn_rate_multiplier = random.uniform(1-self.__burn_rate_range, 1+self.__burn_rate_range)
+        return self.__ref_eng.Scaled(impulse_multiplier, burn_rate_multiplier, self.__noise_sd)
+        
 
 if __name__ == '__main__':
     dt = 0.01

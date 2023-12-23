@@ -8,6 +8,7 @@ import numpy.linalg
 # import scipy.interpolate
 
 from . import mmoi_utils
+from pyrse import numpy_utils as npu
 
 
 class Aero:
@@ -140,9 +141,10 @@ class Component:
             total_drag += child.drag(v, env)
         return total_drag
 
-    def calc_drag(self, v, env):  # NOTE: THIS SHOULD GIVE DRAG IN THREE DIMENSIONS
+    def calc_drag(self, v, env):  # TODO: THIS SHOULD GIVE DRAG IN THREE DIMENSIONS
+        v_mag = npu.magnitude(v.ecef) # NOTE: THIS IS PASSED IN AS A VELOCITYVECTOR3D
         if self.__calc_aero:
-            return 0.5 * env.air_density * self.frontal_area * (v**2) * self.calc_cd(v, env)
+            return 0.5 * env.density * self.frontal_area * (v_mag**2) * self.calc_cd(v, env)
         return 0
 
     def calc_cd(self, v, env):

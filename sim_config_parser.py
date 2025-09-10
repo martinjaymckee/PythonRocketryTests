@@ -89,6 +89,33 @@ class NumericValueConfig:
         return random.gauss(self.__mean, self.__sd)
 
 
+class FunctionalValueConfig:
+    def __init__(self, variance):
+        self.__variance = variance
+
+    def __call__(self, idx=1, N=1):
+        return self
+    
+    def transform(self, val):
+        assert False, 'Error: {}.transform(val) is undefined'.format(self.__class__.__name__)
+
+
+class StepValueConfig(FunctionalValueConfig):
+    def __init__(self, initial, final, threshold, variance = 0):
+        super().__init__(variance)
+        self.__initial = initial
+        self.__final = final
+        self.__threshold = threshold
+
+    def __call__(self, idx=1, N=1):
+        return self
+
+    def transform(self, val):
+        if val > self.__threshold:
+            return self.__final
+        return self.__initial
+
+
 class NumericValueRangeConfig:
     def __init__(self, a, b, variance, is_log=False):
         self.__a = a
@@ -197,22 +224,25 @@ class SimulationMotorParser:
         return eng
 
 
-class SimulationCdParser:
-    def __init__(self):
-        pass
+# class SimulationCdParser:
+#     def __init__(self):
+#         pass
 
-    def __call__(self, cd):
-        try:
-            return float(cd)
-        except:
-            pass
-        return cd
+#     def __call__(self, cd):
+#         try:
+#             return float(cd)
+#         except:
+#             pass
+#         return cd
 
-def log_range(a, b):
-    return NumericValueRangeConfig(a, b, None, is_log=True)
+# def log_range(a, b):
+#     return NumericValueRangeConfig(a, b, None, is_log=True)
 
-def linear_range(a, b):
-    return NumericValueRangeConfig(a, b, None, is_log=False)
+# def linear_range(a, b):
+#     return NumericValueRangeConfig(a, b, None, is_log=False)
+
+# def step_cd(cd0, cd1, RE_thresh):
+#     return StepValueConfig(cd0, cd1, RE_thresh)
 
 class PythonParser:
     __suffix_map = {
@@ -229,7 +259,8 @@ class PythonParser:
     def __init__(self):
         self.__globals = {
             'log_range': lambda a, b: NumericValueRangeConfig(a, b, None, is_log=True),
-            'linear_range': lambda a, b: NumericValueRangeConfig(a, b, None, is_log=False)
+            'linear_range': lambda a, b: NumericValueRangeConfig(a, b, None, is_log=False),
+            'step_cd': lambda cd0, cd1, RE_thresh: StepValueConfig(cd0, cd1, RE_thresh)
         }
         self.__suffix_list = list(reversed(sorted(PythonParser.__suffix_map.keys(), key=lambda x:len(x))))
         self.__locals = {}
@@ -378,8 +409,13 @@ class SimulationConfigParser:
                 self.__results[self.__key] = MotorConfig(self.__value, self.__variance)
             elif isinstance(self.__value, NumericValueRangeConfig): # TODO: FIX THIS TO USE THE VARIANCE ALSO
                 self.__results[self.__key] = self.__value
+            elif isinstance(self.__value, StepValueConfig):
+                self.__results[self.__key] = self.__value
             elif isinstance(self.__value, tuple):
-                self.__results[self.__key] = NumericValueRangeConfig(self.__value[0], self.__value[1], self.__variance)
+                if isinstance(self.__value[0], numbers.Number):
+                    self.__results[self.__key] = NumericValueRangeConfig(self.__value[0], self.__value[1], self.__variance)
+                else: # TODO: FIX THE FACT THAT THIS IS SIMPLY IGNORING VARIANCE ON ANYTHING OTHER THAN A NUMBER
+                    self.__results[self.__key] = self.__value[0]
             else:
                 self.__results[self.__key] = (self.__value, self.__variance)
         self.__char_buffer = ''
@@ -395,12 +431,15 @@ if __name__ == '__main__':
     import os.path
 
     directory = r"D:\Workspace\Rockets\PythonRocketryTests\Simulation Configurations"
-    filename = "test_sim.cfg"
+    #filename = "test_sim.cfg"
+    filename = "anomoloy_detection_sim.cfg"
+
     path = os.path.join(directory, filename)
     path = os.path.abspath(path)
 
     python_parser = PythonParser()
     python_parser('log_range(.001, .1)')
+    python_parser('step_cd(0.8, 0.65, 1.5E6)')
 
     dt_range = NumericValueRangeConfig(0.001, 0.1, None, is_log=True)
     dts = []

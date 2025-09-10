@@ -132,7 +132,7 @@ class Engine(rocket_components.Component):
         self.__max_thrust = np.max(self.__Ts)
         self.__total_impulse = np.trapz(self.__Ts, self.__ts)
         self.__impulse_class = self.__get_impulse_class(self.__total_impulse)
-        self.__thrust_spline = scipy.interpolate.UnivariateSpline(self.__ts, self.__Ts, s=0, k=1)
+        self.__thrust_spline = scipy.interpolate.UnivariateSpline(self.__ts, self.__Ts, s=1, k=1)
         self.__ueq = self.__total_impulse / self.__propellent_mass
 
     def __str__(self):
@@ -196,7 +196,7 @@ class Engine(rocket_components.Component):
     def thrust(self, t):
         if (self.__t_start is None) or (t < self.__t_start) or (t > (self.__t_start + self.__t_burn)):
             return 0
-        return self.__thrust_spline(t)
+        return float(self.__thrust_spline(t-self.__t_start))
 
     def spent_impulse(self, t):
         if (self.__t_start is None) or (t < self.__t_start):
@@ -242,10 +242,10 @@ class Engine(rocket_components.Component):
 
         new_ts = np.array([burn_rate_multiplier * t for t in self.__ts])        
         new_Ts = []
-        noise_sd = noise_sd * np.max(self.__Ts)
+        #noise_sd = noise_sd * np.max(self.__Ts)
         for T in self.__Ts:
-            T_noise = 0 if noise_sd == 0 else random.gauss(0, noise_sd)
-            T = (thrust_multiplier * T) + T_noise
+            T_noise = 0 if noise_sd == 0 else T * random.gauss(0, noise_sd)
+            T = max(0, (thrust_multiplier * T) + T_noise)
             new_Ts.append(T)
         new_Ts = np.array(new_Ts)
         
@@ -261,6 +261,22 @@ class Engine(rocket_components.Component):
             empty_mass=self.__empty_mass, 
             t_start=self.__t_start, 
             comments=('' if self.__comments is None else self.__comments) + ' --> Scaled with impulse = x {}, burn rate = x {}, thrust = x {}, std(noise) = {}'.format(impulse_multiplier, burn_rate_multiplier, thrust_multiplier, noise_sd), 
+            src=self.__src
+        )
+
+    def Clone(self):
+        return Engine(
+            self.__ts, 
+            self.__Ts, 
+            manufacturer=self.__manufacturer, 
+            model=self.__model, 
+            diameter=self.__diameter, 
+            length=self.__length, 
+            delays=self.__delays, 
+            propellent_mass=self.__propellent_mass, 
+            empty_mass=self.__empty_mass, 
+            t_start=self.__t_start, 
+            comments=('' if self.__comments is None else self.__comments), 
             src=self.__src
         )
 

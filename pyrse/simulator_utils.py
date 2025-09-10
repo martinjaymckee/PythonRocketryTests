@@ -41,7 +41,7 @@ class SimResult:
         result.state = state
         return result
     
-    def __init__(self, t = 0, dt = 0, pos=None, vel=None, accel=None, orientation=None, rate=None):
+    def __init__(self, t = 0, dt = 0, pos=None, vel=None, accel=None, orientation=None, rate=None, Re=None):
         self.t = 0
         self.dt = dt
         self.pos = utils.GeographicPosition() if pos is None else pos
@@ -55,6 +55,7 @@ class SimResult:
         self.moments = []
         self.environment = None
         self.events = []
+        self.Re = Re
         
     @property
     def state(self):

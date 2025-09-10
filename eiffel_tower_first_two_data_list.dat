@@ -1,0 +1,28 @@
+flight_data_list = [
+    {
+        'name': 'Maiden',
+        'color': 'b',
+        'comment': 'Maiden flight of the V2 Eiffel Tower to test the flight characteristics.',
+        'h0': 1600, # m
+        'm0': 750/1000, # kg
+        'Sref': .155 * .155, # m^2            
+        'engine_path': r"D:\Workspace\Rockets\PythonRocketryTests\Engines\AeroTech_I65W.rse",
+        'summary_path':  r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250503_I65\BBXI VC_summary_05-03-2025_09_45_29_.csv",
+        'low_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250503_I65\BBXI VC LR_05-03-2025_09_45_29.csv",
+        'high_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250503_I65\BBXI VC HR_05-03-2025_09_45_29.csv",
+        'delay': 8
+    },
+    {
+        'name': 'Second Flight',
+        'color': 'g',
+        'comment': 'Flight at SCORE Club Launch to get data on higher fligh speeds (to be roughly equivalent to a potential K185 flight)',
+        'h0': 1600, # m
+        'm0': 750/1000, # kg
+        'Sref': .155 * .155, # m^2            
+        'engine_path': r"D:\Workspace\Rockets\PythonRocketryTests\Engines\AeroTech_J180T.rse",
+        'summary_path':  r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower_summary_05-17-2025_10_36_05_.csv",
+        'low_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower LR_05-17-2025_10_36_05.csv",
+        'high_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower HR_05-17-2025_10_36_05.csv",
+        'delay': 8
+    }    
+]

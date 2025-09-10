@@ -443,13 +443,18 @@ def parse_cd_estimates(path, estimate_mean=True, Re_max_override=5e6, plot=True)
                 estimates.append( (run, individual, fitness, Re_max, chromosome))
 
         if plot:            
-            fig, ax = plt.subplots(1, constrained_layout=True)
+            fig, ax = plt.subplots(1, constrained_layout=True, figsize = (8, 7))
+            fig.suptitle('Estimated $C_d$ vs. $Re$')
+            ax.set_xlabel('Reynolds Number ($Re$)')
+            ax.set_ylabel('Coefficent of Drag')
+
             xs = np.linspace(0, estimates[0][-1].Re_max, 50)
             
             for _, _, fitness, _, chromosome in estimates:
                 ys = [chromosome(x) for x in xs]
-                ax.plot(xs, ys, alpha=0.25, label='{:0.4f}'.format(fitness))
-            ax.legend() 
+                # ax.plot(xs, ys, alpha=0.25, label='{:0.4f}'.format(fitness))
+                ax.plot(xs, ys, alpha=0.5)#, label='{:0.4f}'.format(fitness))                
+            #ax.legend() 
                 
         if estimate_mean and (len(estimates) > 0):
             cd_sum = np.array(estimates[0][4])
@@ -466,7 +471,8 @@ def parse_cd_estimates(path, estimate_mean=True, Re_max_override=5e6, plot=True)
                 est_mean = estimates[0]
                 ys = [est_mean(x) for x in xs]
                 ax.plot(xs, ys, '.-k', alpha=1, lw=2)
-                
+        if fig is not None:
+            fig.savefig(r'D:\Workspace\Work\Apogee\Articles\Eiffel Tower Altitude\Images\part_I_ga_curve_fit.png', dpi=300)        
         return estimates
     except Exception as e:
         print(e)
@@ -480,7 +486,7 @@ def main(pos = pyrse.utils.GeographicPosition.LLH(38.155458, -104.808906, 1663.5
     estimates = parse_cd_estimates('cd_est.dat.dat')
     for est in estimates:
         print(est)
-    
+    plt.show()
     return
     
     engs = pyrse.engines.EngineDirectory('./Engines')

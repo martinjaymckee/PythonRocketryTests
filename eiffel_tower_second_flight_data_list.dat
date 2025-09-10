@@ -1,0 +1,15 @@
+flight_data_list = [
+    {
+        'name': 'Second Flight',
+        'color': 'g',
+        'comment': 'Flight at SCORE Club Launch to get data on higher fligh speeds (to be roughly equivalent to a potential K185 flight)',
+        'h0': 1600, # m
+        'm0': 750/1000, # kg
+        'Sref': .155 * .155, # m^2            
+        'engine_path': r"D:\Workspace\Rockets\PythonRocketryTests\Engines\AeroTech_J180T.rse",
+        'summary_path':  r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower_summary_05-17-2025_10_36_05_.csv",
+        'low_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower LR_05-17-2025_10_36_05.csv",
+        'high_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250517_J180\eiffeltowerj180\Eiffel Tower HR_05-17-2025_10_36_05.csv",
+        'delay': 8
+    }
+]

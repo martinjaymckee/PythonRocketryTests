@@ -1,0 +1,15 @@
+flight_data_list = [
+    {
+        'name': 'Fourth Flight',
+        'color': 'm',
+        'comment': 'Altitude attempt flight on the third day of NSL West 2025. Near zero wind.',
+        'h0': 2317, # m
+        'm0': 953/1000, # kg
+        'Sref': .155 * .155, # m^2            
+        'engine_path': r"D:\Workspace\Rockets\PythonRocketryTests\Engines\AeroTech_K185W.rse",
+        'summary_path':  r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250525_K185\eiffeltowerflightnslwest2025k185\Eiffel Tower_summary_05-25-2025_10_08_11_.csv",
+        'low_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250525_K185\eiffeltowerflightnslwest2025k185\Eiffel Tower LR_05-25-2025_10_08_11.csv",
+        'high_rate_path': r"D:\Workspace\Rockets\HPR\Eiffel Tower v2\Data\20250525_K185\eiffeltowerflightnslwest2025k185\Eiffel Tower HR_05-25-2025_10_08_11.csv",
+        'delay': 8
+    }    
+]

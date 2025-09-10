@@ -18,3 +18,4 @@ There are a number of Python libraries used in the various tests.  To run them a
 - ambiance
 - opensimplex
 - filterpy
+- KicadModTree

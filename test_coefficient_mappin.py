@@ -88,10 +88,10 @@ def cd_from_mach_aoa_asym_smooth(mach, aoa_deg, *,
 
 if __name__ == '__main__':
     seed = 42
-    num_samples = 1000
+    num_samples = 10000
     cd_noise_stddev = 0.1
-    mach_range = (0.0, 0.5)
-    aoa_deviation = 10.0
+    mach_range = (0.0, 1.5)
+    aoa_deviation = 20.0
 
     # Cd model parameters
     cd_params = {
@@ -152,17 +152,21 @@ if __name__ == '__main__':
     samples = create_cd_samples(mach_range, (-aoa_deviation, aoa_deviation), num_samples, seed=seed)
     noisy_samples = add_gaussian_noise_to_samples(samples, stddev=cd_noise_stddev, seed=seed)
 
-    # fig_2d, ax2d = plt.subplots(layout='constrained')
-    # ax2d.set_xlabel('Mach')
-    # ax2d.set_ylabel('Cd')
-    # ax2d.set_title('Cd(Mach, AoA=0) with Asymmetric Transonic Peak')
-    # ax2d.grid(True)
-    # ax2d.set_xlim(0, 1.5)
-    # ax2d.set_ylim(0, 2.5)
-    # ax2d.scatter([s.parameters['M'] for s in samples],
-    #           [s.coefficient for s in samples])
-    # ax2d.scatter([s.parameters['M'] for s in noisy_samples],
-    #           [s.coefficient for s in noisy_samples])
+
+    ms = np.array([s.parameters['M'] for s in samples]) 
+    aoas = np.array([s.parameters['aoa'] for s in samples])
+    cds_clean = np.array([s.coefficient for s in samples])
+    cds_noisy = np.array([s.coefficient for s in noisy_samples])
+
+    fig_2d, ax2d = plt.subplots(layout='constrained')
+    ax2d.set_xlabel('Mach')
+    ax2d.set_ylabel('Cd')
+    ax2d.set_title('Cd(Mach, AoA=0) with Asymmetric Transonic Peak')
+    ax2d.grid(True)
+    ax2d.set_xlim(*mach_range)
+    ax2d.set_ylim(-aoa_deviation, aoa_deviation)
+    ax2d.scatter(ms, aoas, c=cds_clean, cmap='viridis', s=30, alpha=0.7)
+
     
     fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, layout='constrained')
     ax.set_xlabel('Mach')
@@ -172,21 +176,11 @@ if __name__ == '__main__':
     ax.view_init(elev=30, azim=-120)
     ax.grid(True)
     ax.set_box_aspect([1,1,0.7])
-    ax.set_xlim(0, 0.5)
-    ax.set_ylim(-15, 15)
-    ax.set_zlim(0, 2.5)
-    ax.scatter(
-        [s.parameters['M'] for s in samples],
-        [s.parameters['aoa'] for s in samples],
-        [s.coefficient for s in samples],
-        c='b', alpha=0.25
-    )
+    ax.set_xlim(*mach_range)
+    ax.set_ylim(-aoa_deviation, aoa_deviation)
+    ax.set_zlim(np.min(cds_noisy)-0.1, np.max(cds_noisy)+0.1)
+    ax.scatter(ms, aoas, cds_clean, c='b', s=20, alpha=0.7)
+    ax.scatter(ms, aoas, cds_noisy, c='r', s=20, alpha=0.7)
 
-    ax.scatter(
-        [s.parameters['M'] for s in noisy_samples],
-        [s.parameters['aoa'] for s in noisy_samples],
-        [s.coefficient for s in noisy_samples],
-        c='r', alpha=0.25
-    )    
     plt.show()
 

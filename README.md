@@ -8,10 +8,13 @@ There is little documentation in any of the scripts at the moment, so reusabilit
 There are a number of Python libraries used in the various tests.  To run them all, the following modules must be installed.
 
 - numpy
-- numpy-quaternions (it may be better to replace this anyway)
+- numpy-quaternion (it may be better to replace this anyway)
 - scipy
 - pyserial
 - matplotlib
 - seaborn
 - progress (progress bar library)
 - pandas
+- ambiance
+- opensimplex
+- filterpy

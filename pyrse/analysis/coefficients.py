@@ -4,6 +4,8 @@ import math
 from typing import Dict
 import numpy as np
 
+import pyrse.analysis.regression as regres
+
 
 class ParameterStatistics:
     def __init__(self, samples):

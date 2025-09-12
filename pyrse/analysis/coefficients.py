@@ -4,7 +4,81 @@ import math
 from typing import Dict
 import numpy as np
 
+from typing import List, Dict, Tuple, Optional
 
+class BaseRegressor:
+    def __init__(self):
+        self.param_names = {}
+        self.param_stats = {}
+        self.residuals = []
+        self.goodness_of_fit = {}
+
+    def fit(self, samples: List['CoefficientSample']):
+        raise NotImplementedError("Subclasses should implement this method.")
+    
+    def __call__(self, **params):
+        raise NotImplementedError("Subclasses should implement this method.")
+    
+    def combine(self, samples: List['CoefficientSample'], regressor_cls=None):
+        if regressor_cls is None:
+            regressor_cls = self.__class__
+        new_regressor = regressor_cls()
+        new_regressor.fit(samples)
+        return CompoundRegressor([self, new_regressor], mode='parallel')
+    
+    def chain(self, samples: List['CoefficientSample'], regressor_cls=None):
+        if regressor_cls is None:
+            regressor_cls = self.__class__
+        new_regressor = regressor_cls()
+        new_regressor.fit(samples)
+        return CompoundRegressor([self, new_regressor], mode='sequential')
+    
+
+class CompoundRegressor:
+    def __init__(self, regressors: List[BaseRegressor], mode: str = 'parallel'):
+        if mode not in ('parallel', 'sequential'):
+            raise ValueError("Mode must be 'parallel' or 'sequential'.")
+        super().__init__()
+        self.regressors = regressors
+        self.mode = mode
+
+    def fit(self, samples: List['CoefficientSample'] ->Tuple[List[float], Dict]):
+        residuals = []
+        for reg in self.regressors:
+            res, _ = reg.fit(samples)
+            residuals.extend(res)
+        self.residuals = residuals
+        self.goodness_of_fit = {'compound_mode': self.mode, 'n_regressors': len(self.regressors)}
+        return self.residuals, self.goodness_of_fit
+
+    def __call__(self, **params):
+        results = [reg(**params) for reg in self.regressors]
+        if self.mode == 'parallel':
+            values, uncerts = zip(*results)
+            # TODO: THESE CALCULATIONS NEED TO BE WEIGHTED
+            mean_val = float(np.mean(np.array(values))) 
+            combined_uncert = float(np.sqrt(np.mean(np.array(uncerts)**2)))
+            return mean_val, combined_uncert
+        elif self.mode == 'sequential':
+            val, uncert = results[0]
+            for reg in self.regressors[1:]:
+                if isinstance(reg, CompoundRegressor):
+                    val, uncert = reg**{**params, 'input': val}
+                return val, uncert
+        else:
+            raise ValueError(f'Unknown Mode {self.mode}')
+
+    def tree_view(self, indent: int = 0) -> str:
+        pad = '  ' * indent
+        desc = f'{pad}{self.__class__.__name__} (mode={self.mode})\n'
+        for reg in self.regressors:
+            if isinstance(reg, CompoundRegressor):
+                desc += reg.tree_view(indent + 1)
+            else:
+                desc += f'{pad}  {reg.__class__.__name__}\n'
+        return desc           
+    
+    
 class ParameterStatistics:
     def __init__(self, samples):
         if not samples:

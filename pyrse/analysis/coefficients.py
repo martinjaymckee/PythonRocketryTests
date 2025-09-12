@@ -1,7 +1,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 import math
-from typing import Dict
+from typing import List, Dict, Tuple, Optional
 import numpy as np
 
 import pyrse.analysis.regression as regres
@@ -66,12 +66,19 @@ class CoefficientMapping:
         self._validate_samples(samples)
 
         self.samples = samples
-        self.regressor = regressor
+        self.regressor = regressor if regressor is not None else regres.selectRegressor(self.samples)
+        self.regressor.fit(self.samples)
 
-        # Example: Compute coefficient and uncertainty from samples
-        self.coefficient = self._compute_coefficient()
-        self.uncertainty = self._compute_uncertainty()
+    def __call__(self, params: Dict[str, float]) -> Tuple[float, float]:
+        """
+        Evaluate the coefficient mapping at the given parameters.
 
+        :param params: dict of parameter values
+        :return: tuple of (coefficient value, uncertainty estimate)
+        """
+        value, uncert = self.regressor(**params)
+        return value, uncert    
+    
     def _validate_samples(self, samples):
         if not samples:
             raise ValueError("Samples list cannot be empty.")
@@ -84,16 +91,6 @@ class CoefficientMapping:
             elif set(sample.parameters.keys()) != param_keys:
                 raise ValueError("All samples must have the same parameter keys.")
             
-    def _compute_coefficient(self):
-        # Placeholder: mean of sample coefficients
-        return sum(sample.coefficient for sample in self.samples) / len(self.samples)
-
-    def _compute_uncertainty(self):
-        # Placeholder: standard deviation of sample coefficients
-        mean = self.coefficient
-        variance = sum((sample.coefficient - mean) ** 2 for sample in self.samples) / len(self.samples)
-        return variance ** 0.5
-
     def __repr__(self):
         return (f"CoefficientMapping(regressor={self.regressor}, "
             f"coefficient={self.coefficient}, uncertainty={self.uncertainty})")

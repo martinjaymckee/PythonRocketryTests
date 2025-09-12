@@ -4,6 +4,7 @@ import numpy as np
 from pyrse.analysis import coefficients
 from scipy.stats import qmc
 
+import pyrse.analysis.coefficients as coeff # to avoid name conflict
 
 def sigmoid(x):
     """Smooth transition function for blending regions."""
@@ -88,10 +89,12 @@ def cd_from_mach_aoa_asym_smooth(mach, aoa_deg, *,
 
 if __name__ == '__main__':
     seed = 42
-    num_samples = 10000
+    num_samples = 5000
     cd_noise_stddev = 0.1
     mach_range = (0.0, 1.5)
-    aoa_deviation = 20.0
+    mach_range_display = (0.0, 1.6)
+    aoa_deviation = 8.0
+    aoa_deviation_display = 10.0
 
     # Cd model parameters
     cd_params = {
@@ -152,19 +155,22 @@ if __name__ == '__main__':
     samples = create_cd_samples(mach_range, (-aoa_deviation, aoa_deviation), num_samples, seed=seed)
     noisy_samples = add_gaussian_noise_to_samples(samples, stddev=cd_noise_stddev, seed=seed)
 
-
+    cd_mapper = coeff.CoefficientMapping(noisy_samples)
+    
     ms = np.array([s.parameters['M'] for s in samples]) 
     aoas = np.array([s.parameters['aoa'] for s in samples])
     cds_clean = np.array([s.coefficient for s in samples])
     cds_noisy = np.array([s.coefficient for s in noisy_samples])
+
+    cds_mapped = np.array([cd_mapper({'M': m, 'aoa': aoa})[0] for m, aoa in zip(ms, aoas)])
 
     fig_2d, ax2d = plt.subplots(layout='constrained')
     ax2d.set_xlabel('Mach')
     ax2d.set_ylabel('Cd')
     ax2d.set_title('Cd(Mach, AoA=0) with Asymmetric Transonic Peak')
     ax2d.grid(True)
-    ax2d.set_xlim(*mach_range)
-    ax2d.set_ylim(-aoa_deviation, aoa_deviation)
+    ax2d.set_xlim(*mach_range_display)
+    ax2d.set_ylim(-aoa_deviation_display, aoa_deviation_display)
     ax2d.scatter(ms, aoas, c=cds_clean, cmap='viridis', s=30, alpha=0.7)
 
     
@@ -176,11 +182,184 @@ if __name__ == '__main__':
     ax.view_init(elev=30, azim=-120)
     ax.grid(True)
     ax.set_box_aspect([1,1,0.7])
-    ax.set_xlim(*mach_range)
-    ax.set_ylim(-aoa_deviation, aoa_deviation)
+    ax.set_xlim(*mach_range_display)
+    ax.set_ylim(-aoa_deviation_display, aoa_deviation_display)
     ax.set_zlim(np.min(cds_noisy)-0.1, np.max(cds_noisy)+0.1)
     ax.scatter(ms, aoas, cds_clean, c='b', s=20, alpha=0.7)
-    ax.scatter(ms, aoas, cds_noisy, c='r', s=20, alpha=0.7)
+    ax.scatter(ms, aoas, cds_noisy, c='r', s=20, alpha=0.2)
+    ax.scatter(ms, aoas, cds_mapped, c='g', s=20, alpha=0.7)
+
+    fig_residuals, ax_residuals = plt.subplots(1, layout='constrained')
+    ax_residuals.set_xlabel('sample index')
+    ax_residuals.set_ylabel('Cd residual')
+    ax_residuals.set_title('Cd Fit Residuals')
+    ax_residuals.grid(True)
+    residuals_noisy = cds_noisy - cds_clean
+    residuals_mapped = cds_mapped - cds_clean
+    ax_residuals.scatter(np.arange(len(residuals_noisy)), residuals_noisy, c='r', s=20, alpha=0.2, label='noisy samples')
+    ax_residuals.scatter(np.arange(len(residuals_mapped)), residuals_mapped, c='g', s=20, alpha=0.7, label='mapped samples')
+    ax_residuals.axhline(0, color='k', lw=0.8)
+    ax_residuals.legend()  
+    print('Noisy samples: rms(residual) = {:.4f}, stddev = {:.4f}'.format(np.sqrt(np.sum(residuals_noisy**2))/len(residuals_noisy), np.std(residuals_noisy)))
+    print('Mapped samples: rms(residual) = {:.4f}, stddev = {:.4f}'.format(np.sqrt(np.sum(residuals_mapped**2))/len(residuals_mapped), np.std(residuals_mapped)))
+
+    # import pyrse.analysis.regression as regres
+    # for gamma in [0.5, 1.0, 2.0, 5.0, 10.0]:
+    #     for alpha in [1e-5, 1e-4, 1e-3, 1e-2]:
+    #         rbf = regres.RBFRegressor(alpha=alpha, gamma=gamma, n_bootstrap=10)
+    #         res, gof = rbf.fit(samples)
+    #         print(f"gamma={gamma}, alpha={alpha}, rmse={gof['rmse']:.4f}")
+
+    r1 = np.abs(residuals_noisy)
+    r2 = np.abs(residuals_mapped)
+    vmin = min(r1.min(), r2.min())
+    vmax = max(r1.max(), r2.max())
+
+    fig_noisy_2d, ax_noisy_2d = plt.subplots(layout='constrained')
+    ax_noisy_2d.set_xlabel('Mach')
+    ax_noisy_2d.set_ylabel('Aoa (deg)')
+    ax_noisy_2d.set_title('Cd Error Magnitude in Noisy Samples')
+    ax_noisy_2d.grid(True)
+    ax_noisy_2d.set_xlim(*mach_range_display)
+    ax_noisy_2d.set_ylim(-aoa_deviation_display, aoa_deviation_display)
+    ax_noisy_2d.scatter(ms, aoas, c=r1, cmap='viridis', s=30, alpha=0.7, vmin=vmin, vmax=vmax)
+
+    fig_mapped_2d, ax_mapped_2d = plt.subplots(layout='constrained')
+    ax_mapped_2d.set_xlabel('Mach')
+    ax_mapped_2d.set_ylabel('Aoa (deg)')
+    ax_mapped_2d.set_title('Cd Error Magnitude in Mapped Samples')
+    ax_mapped_2d.grid(True)
+    ax_mapped_2d.set_xlim(*mach_range_display)
+    ax_mapped_2d.set_ylim(-aoa_deviation_display, aoa_deviation_display)
+    ax_mapped_2d.scatter(ms, aoas, c=r2, cmap='viridis', s=30, alpha=0.7, vmin=vmin, vmax=vmax)
+
 
     plt.show()
 
+# import numpy as np
+# import matplotlib.pyplot as plt
+# from numpy.linalg import cond, eigvals
+
+# # X, y, weights must be from your fit call
+# # If you don't have X currently stored, temporarily store it in fit() as self._last_X, self._last_y, self._last_w
+
+# X = reg._last_X          # (n, p)
+# y = reg._last_y          # (n,)
+# w = reg._last_w          # (n,)
+
+# # 1) Condition number of weighted normal matrix
+# W_sqrt = np.sqrt(w)
+# Xw = X * W_sqrt[:, None]
+# XTWX = Xw.T @ Xw
+# print("cond(X^T W X) =", cond(XTWX))
+
+# # 2) Small eigenvalues?
+# vals = np.sort(np.abs(eigvals(XTWX)))[::-1]
+# print("Top 6 eigenvalues:", vals[:6])
+# print("Last 6 eigenvalues:", vals[-6:])
+
+# # 3) Leverage (hat matrix diagonal) -- indicates influential points
+# # H = W_sqrt[:,None]*X @ inv(XTWX) @ (W_sqrt[:,None]*X).T  but only need diag:
+# XTWX_inv = np.linalg.pinv(XTWX)
+# H_diag = np.sum((Xw @ XTWX_inv) * Xw, axis=1)   # elementwise dot
+# plt.figure()
+# plt.scatter(np.arange(len(H_diag)), H_diag, s=10)
+# plt.title("Leverage (hat diag) per sample")
+# plt.show()
+# print("High leverage indices:", np.where(H_diag > 3*X.shape[1]/X.shape[0])[0])
+
+# # 4) Residuals vs predicted and vs inputs
+# y_pred = X @ reg.coeffs
+# residuals = y - y_pred
+# plt.figure(figsize=(10,4))
+# plt.subplot(1,2,1)
+# plt.scatter(y_pred, residuals, s=5); plt.axhline(0, color='k', lw=0.8)
+# plt.title("Residuals vs Predicted")
+# plt.subplot(1,2,2)
+# plt.hist(residuals, bins=60); plt.title("Residual histogram")
+# plt.show()
+
+# # 5) Residuals vs each parameter (check structured misfit)
+# for i,name in enumerate(reg.param_names):
+#     plt.figure()
+#     plt.scatter([s.parameters[name] for s in reg._last_samples], residuals, s=6)
+#     plt.xlabel(name); plt.ylabel("residual"); plt.title(f"Residual vs {name}")
+#     plt.show()
+
+# def fit_weighted_ridge(X, y, w, alpha=1e-6):
+#     # X: (n,p), w: (n,)
+#     W_sqrt = np.sqrt(w)
+#     Xw = X * W_sqrt[:, None]
+#     yw = y * W_sqrt
+#     XT_W_X = Xw.T @ Xw
+#     # Add ridge: alpha * I (alpha chosen by CV)
+#     p = XT_W_X.shape[0]
+#     A = XT_W_X + alpha * np.eye(p)
+#     b = Xw.T @ yw
+#     coeffs = np.linalg.solve(A, b)
+#     # residuals (unweighted)
+#     y_pred = X @ coeffs
+#     residuals = y - y_pred
+#     sigma2 = np.sum(w * residuals**2) / (len(y) - p)
+#     cov = sigma2 * np.linalg.inv(A)
+#     return coeffs, cov, residuals
+
+
+# Using PolynomialFeatures with raw inputs can produce correlated columns. Use StandardScaler first, or use sklearn.preprocessing pipeline and orthonormal polynomials:
+# from sklearn.preprocessing import PolynomialFeatures, StandardScaler
+# from sklearn.pipeline import Pipeline
+
+# pipeline = Pipeline([
+#     ('scale', StandardScaler()),
+#     ('poly', PolynomialFeatures(degree=2, include_bias=True))
+# ])
+# X_scaled_poly = pipeline.fit_transform(raw_X)   # store pipeline in reg
+# Scaling massively improves conditioning and interpretability; do this before building the X you store in diagnostics.
+
+# import numpy as np
+# from numpy.linalg import solve, pinv
+# from sklearn.preprocessing import StandardScaler, PolynomialFeatures
+# from sklearn.pipeline import Pipeline
+
+# class StablePolyRegressor:
+#     def __init__(self, degree=2, ridge_alpha=1e-6, scale_inputs=True):
+#         self.degree = degree
+#         self.ridge_alpha = ridge_alpha
+#         self.scale_inputs = scale_inputs
+#         steps = []
+#         if scale_inputs:
+#             steps.append(('scale', StandardScaler()))
+#         steps.append(('poly', PolynomialFeatures(degree=degree, include_bias=True)))
+#         self.pipeline = Pipeline(steps)
+#         self.coeffs = None
+#         self.cov = None
+#         self.p = None
+#         # store last batch for diagnostics
+#         self._last_X = None
+#         self._last_y = None
+#         self._last_w = None
+
+#     def fit(self, raw_X, y, weights=None):
+#         X = self.pipeline.fit_transform(raw_X)
+#         self._last_X = X; self._last_y = y; self._last_w = weights if weights is not None else np.ones(len(y))
+#         if weights is None:
+#             weights = np.ones(len(y))
+#         W_sqrt = np.sqrt(weights)
+#         Xw = X * W_sqrt[:, None]
+#         yw = y * W_sqrt
+#         XT_W_X = Xw.T @ Xw
+#         p = XT_W_X.shape[0]
+#         A = XT_W_X + self.ridge_alpha * np.eye(p)
+#         b = Xw.T @ yw
+#         self.coeffs = solve(A, b)
+#         residuals = y - X @ self.coeffs
+#         sigma2 = np.sum(weights * residuals**2) / (len(y) - p)
+#         self.cov = sigma2 * pinv(A)
+#         self.p = p
+#         return residuals
+
+#     def predict(self, raw_X):
+#         X = self.pipeline.transform(raw_X)
+#         mu = X @ self.coeffs
+#         var = np.sum((X @ self.cov) * X, axis=1)  # row @ cov @ row^T for each
+#         return mu, np.sqrt(np.maximum(var, 0.0))

@@ -104,7 +104,8 @@ class RocketEKFJacobian:
         K = self.P @ H.T / S
         self.x += (K * y).flatten()
         self.P = (np.eye(6) - K @ H) @ self.P
-        self.z_pos += (K * y).item()  # correct integrated altitude
+        print (dt*(K * y)[2])
+        self.z_pos += (K * y)[2]  # correct integrated altitude
 
     def get_aero_angles(self):
         vx, vy, vz = self.x[0:3]
@@ -117,119 +118,138 @@ class RocketEKFJacobian:
 
 
 
-# Define thrust and mass
-def thrust(t): return 500.0 if t<2.0 else 0.0
-def mass(t): return 50.0
+if __name__ == '__main__':
+    import math
 
-# Aerodynamic coefficients
-def C_l(alpha): return 2*np.pi*alpha
-def C_d(alpha): return 0.1 + 0.5*alpha**2
-def C_y(beta): return 2*np.pi*beta
+    import matplotlib.pyplot as plt
+    import numpy as np
 
-ekf = RocketEKFJacobian(mass, thrust, S_ref=0.05)
-ekf.set_aero_coefficients(C_l, C_d, C_y)
-
-dt = 0.002
-time = np.arange(0,5,dt)
-for t in time:
-    gyro = np.array([0,0,0])  # replace with measurements
-    accel = np.array([0,0,0]) # replace with measurements
-    baro = 0                   # replace with altitude measurement
-
-    ekf.ekf_predict(gyro, t)
-    ekf.ekf_update_accel(accel)
-    ekf.ekf_update_baro(baro)
-
-    alpha, beta = ekf.get_aero_angles()
-    print(f"t={t:.2f} s, AoA={np.degrees(alpha):.2f} deg, Sideslip={np.degrees(beta):.2f} deg")
+    from pyrse.analysis.coefficients import CoefficientMapping
+    import pyrse.analysis.regression as pyrse_regress
+    import pyrse.engines as engines
+    from pyrse.flight_data import loadOpenRocketExport, loadBlueRavenLog
 
 
+    m0 = 0.750
+    eng = engines.Engine.RSE(r'D:\User Data\Documents\Rockets\PythonRocketryTests\Engines\AeroTech_G74W.rse')
+    or_flight_data = loadOpenRocketExport(r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\OpenRocket\Exports\or_sa_5_g74_1.csv")
+    br_flight_data = loadBlueRavenLog(
+                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5_summary_09-06-2025_10_03_11_.csv",
+                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5 LR_09-06-2025_10_03_11.csv",
+                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5 HR_09-06-2025_10_03_11.csv"
+                                    )   
+    br_flight_data.updateEvents()
 
-# import matplotlib.pyplot as plt
-# from matplotlib.backends.backend_pdf import PdfPages
+    marker_size = 10
+    num_est_points = 25
+    fig, axs = plt.subplots(3, layout='constrained')
 
-# # Create PDF
-# with PdfPages('/mnt/data/multi_sensor_flight_report_layout.pdf') as pdf:
+    cd_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cd', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
+    cl_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cl', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
+    cm_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cm', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
 
-#     # Page 1: Vertical Flight
-#     fig, axes = plt.subplots(4, 1, figsize=(8.5, 11))
-#     fig.suptitle('Rocket Flight Report - Vertical Flight', fontsize=16)
+    aoas = or_flight_data['aoa'].values
+    est_aoas = np.linspace(0, np.nanmax(aoas), num_est_points)
+    
+    axs[0].scatter(57.3 * aoas, or_flight_data['Cd'].values, s=marker_size)
+    cds_est = np.array([cd_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    axs[0].scatter(57.3 * est_aoas, cds_est, s=marker_size)
 
-#     # Panel 1: Altitude & Vertical Velocity
-#     axes[0].set_title('Altitude & Vertical Velocity')
-#     axes[0].set_xlabel('Time [s]')
-#     axes[0].set_ylabel('Altitude [m] / Vertical Velocity [m/s]')
-#     axes[0].text(0.5, 0.5, 'Barometer: Altitude\nIMU: Vertical Velocity\nGPS: Altitude/Vertical Velocity',
-#                  ha='center', va='center', fontsize=12, alpha=0.3)
+    axs[1].scatter(57.3 * aoas, or_flight_data['Cl'].values, s=marker_size)
+    cls_est = np.array([cl_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    axs[1].scatter(57.3 * est_aoas, cls_est, s=marker_size)
 
-#     # Panel 2: Acceleration
-#     axes[1].set_title('Acceleration')
-#     axes[1].set_xlabel('Time [s]')
-#     axes[1].set_ylabel('m/s^2')
-#     axes[1].text(0.5, 0.5, 'IMU: Longitudinal & Lateral Acceleration',
-#                  ha='center', va='center', fontsize=12, alpha=0.3)
+    axs[2].scatter(57.3 * aoas, or_flight_data['Cm'].values, s=marker_size)
+    cms_est = np.array([cm_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    axs[2].scatter(57.3 * est_aoas, cms_est, s=marker_size)
 
-#     # Panel 3: Angular Rates / Orientation
-#     axes[2].set_title('Angular Rates / Orientation')
-#     axes[2].set_xlabel('Time [s]')
-#     axes[2].set_ylabel('deg/s / deg')
-#     axes[2].text(0.5, 0.5, 'IMU: Roll, Pitch, Yaw Rates\nOrientation (Integrated)',
-#                  ha='center', va='center', fontsize=12, alpha=0.3)
+    # Define thrust and mass
+    def thrust(t): return eng.thrust(t)
+    def mass(t): return eng.calc_mass(t) + m0
 
-#     # Panel 4: Lateral Displacement (IMU) - Placeholder
-#     axes[3].set_title('Lateral Displacement (IMU)')
-#     axes[3].set_xlabel('Time [s]')
-#     axes[3].set_ylabel('m')
-#     axes[3].text(0.5, 0.5, 'Derived from IMU or N/A', ha='center', va='center', fontsize=12, alpha=0.3)
+    # Aerodynamic coefficients
+    def C_l(alpha): return cl_mapping({'aoa': alpha})
+    def C_d(alpha): return cd_mapping({'aoa': alpha})
+    def C_y(beta): return cm_mapping({'aoa': 0})
 
-#     plt.tight_layout(rect=[0, 0, 1, 0.96])
-#     pdf.savefig(fig)
-#     plt.close()
+    fig_summary, axs_summary = plt.subplots(3, layout='constrained', sharex=True)
+    fig_summary.suptitle('Flight Summary')
 
-#     # Page 2: GPS / Trajectory
-#     fig, axes = plt.subplots(3, 1, figsize=(8.5, 11))
-#     fig.suptitle('Rocket Flight Report - GPS & Trajectory', fontsize=16)
+    ts = br_flight_data['t'].values
+    axs_summary[0].plot(ts, br_flight_data['az'].values, label='az')
+    axs_summary[0].set_title('Vertical Acceleration')
+    axs_summary[0].set_ylabel('Acceleration ($m/s^2$)')
+    axs_summary[1].plot(ts, br_flight_data['Vz'].values, label='Vz')
+    axs_summary[1].set_title('Vertical Velocity')
+    axs_summary[1].set_ylabel('Velocity ($m/s$)')
+    axs_summary[2].plot(ts, br_flight_data['h'].values, label='h')
+    axs_summary[2].set_title('Altitude')
+    axs_summary[2].set_ylabel('Altitude ($m$)')
+    axs_summary[2].set_xlabel('Time (s)')
+    axs_summary[0].grid()
 
-#     # Panel 1: 2D Horizontal Trajectory
-#     axes[0].set_title('2D Horizontal Trajectory (X vs Y)')
-#     axes[0].set_xlabel('X [m]')
-#     axes[0].set_ylabel('Y [m]')
-#     axes[0].text(0.5, 0.5, 'GPS: Horizontal Path\nOverlay IMU Lateral Displacement',
-#                  ha='center', va='center', fontsize=12, alpha=0.3)
+    print(br_flight_data.events)
+    for idx, (name, evt) in enumerate(br_flight_data.events.items()):
+        for ax in axs_summary:
+            t = evt.t
+            c = evt.color
+            ax.axvline(t, color=c, linestyle='--')
+            height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
+            ax.text(t, height, name, rotation=90, verticalalignment='top')
 
-#     # Panel 2: 3D Trajectory (schematic)
-#     axes[1].set_title('3D Trajectory (X,Y,Z)')
-#     axes[1].axis('off')
-#     axes[1].text(0.5, 0.5, '3D Flight Path Schematic\nGPS/IMU', ha='center', va='center', fontsize=12, alpha=0.3)
+    fig_detail, axs_detail = plt.subplots(3, layout='constrained', sharex=True)
+    fig_detail.suptitle('Ascent Summary')
 
-#     # Panel 3: Ground Speed / Track Angle
-#     axes[2].set_title('Ground Speed / Track Angle vs Time')
-#     axes[2].set_xlabel('Time [s]')
-#     axes[2].set_ylabel('m/s / deg')
-#     axes[2].text(0.5, 0.5, 'GPS: Speed & Track Angle', ha='center', va='center', fontsize=12, alpha=0.3)
+    ts = br_flight_data['t'].values
+    t_apogee = br_flight_data.events['Apogee'].t if 'Apogee' in br_flight_data.events else ts[-1]
+    idx_apogee = np.searchsorted(ts, t_apogee)
+    ts = ts[:idx_apogee]
+    axs_detail[0].plot(ts, br_flight_data['az'].values[:idx_apogee], label='az')
+    axs_detail[0].set_title('Vertical Acceleration')
+    axs_detail[0].set_ylabel('Acceleration ($m/s^2$)')
+    axs_detail[1].plot(ts, br_flight_data['Vz'].values[:idx_apogee], label='Vz')
+    axs_detail[1].set_title('Vertical Velocity')
+    axs_detail[1].set_ylabel('Velocity ($m/s$)')
+    axs_detail[2].plot(ts, br_flight_data['h'].values[:idx_apogee], label='h')
+    axs_detail[2].set_title('Altitude')
+    axs_detail[2].set_ylabel('Altitude ($m$)')
+    axs_detail[2].set_xlabel('Time (s)')
+    axs_detail[0].grid()
 
-#     plt.tight_layout(rect=[0, 0, 1, 0.96])
-#     pdf.savefig(fig)
-#     plt.close()
+    for idx, (name, evt) in enumerate(br_flight_data.events.items()):
+        for ax in axs_detail:
+            t = evt.t
+            c = evt.color
+            ax.axvline(t, color=c, linestyle='--')
+            height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
+            ax.text(t, height, name, rotation=90, verticalalignment='top')
+    plt.show()
 
-#     # Page 3: Summary Metrics
-#     fig, ax = plt.subplots(figsize=(8.5, 11))
-#     fig.suptitle('Rocket Flight Report - Summary Metrics', fontsize=16)
-#     ax.axis('off')
-#     metrics_text = (
-#         'Key Metrics (Placeholder):\n\n'
-#         '- Max Altitude (Barometer/GPS)\n'
-#         '- Max Vertical Velocity (IMU / GPS)\n'
-#         '- Max Lateral Δv (IMU)\n'
-#         '- Max Angular Rates (IMU)\n'
-#         '- Flight Duration\n'
-#         '- Powered Flight Duration\n'
-#         '- Apogee Time\n'
-#         '- Total Horizontal Displacement (GPS)\n'
-#         '- Course Deviation Metric (GPS)'
-#     )
-#     ax.text(0.05, 0.95, metrics_text, fontsize=12, va='top')
-#     pdf.savefig(fig)
-#     plt.close()
+    # ekf = RocketEKFJacobian(mass, thrust, S_ref=0.05)
+    # ekf.set_aero_coefficients(C_l, C_d, C_y)
 
-# print("PDF layout generated: /mnt/data/multi_sensor_flight_report_layout.pdf")
+    # dt = 0.002
+    # time = np.arange(0,5,dt)
+    # alphas = []
+    # betas = []
+    # for t in time:
+    #     gyro = np.array([0,0,0])  # replace with measurements
+    #     accel = np.array([0,0,0]) # replace with measurements
+    #     baro = 0                   # replace with altitude measurement
+
+    #     ekf.ekf_predict(gyro, t)
+    #     ekf.ekf_update_accel(accel)
+    #     ekf.ekf_update_baro(baro)
+
+    #     alpha, beta = ekf.get_aero_angles()
+    #     alphas.append(alpha)
+    #     betas.append(beta)
+    #     print(f"t={t:.2f} s, AoA={np.degrees(alpha):.2f} deg, Sideslip={np.degrees(beta):.2f} deg")
+    # alphas = np.array(alphas)
+    # betas = np.array(betas)
+
+    # fig, axs = plt.subplots(2, layout='constrained')
+    # axs[0].plot(time, alphas)
+    # axs[1].plot(time, betas)
+
+    # plt.show()

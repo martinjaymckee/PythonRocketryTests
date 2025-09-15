@@ -52,10 +52,32 @@ class ParameterStatistics:
 class CoefficientSample:
     coefficient: float
     parameters: Dict[str, float]
-    weight: float
+    weight: float = 1.0
 
 
 class CoefficientMapping:
+    @classmethod
+    def FromFlightData(cls, fd, coeff, params, regressor=None):
+        samples = []
+        coeff_values = fd[coeff].values
+        # TODO: USE THE INTERPOLATION MASK TO MODIFY SAMPLE WEIGHT
+        param_values = {}
+        for param in params:
+            param_values[param] = fd[param].values
+            # TODO: USE THE INTERPOLATION MASK TO MODIFY SAMPLE WEIGHT
+        for idx in range(len(coeff_values)):
+            val = coeff_values[idx]
+            if math.isnan(val):
+                continue
+            sample_params = {}
+            for p in params:
+                param_val = param_values[p][idx]
+                if math.isnan(param_val):
+                    continue
+                sample_params[p] = param_val
+            samples.append(CoefficientSample(coeff_values[idx], sample_params))
+        return CoefficientMapping(samples, regressor=regressor)
+    
     def __init__(self, samples, regressor=None):
         """
         Wraps a set of CoefficientSample objects and a regressor value to a coefficient value and an uncertainty estimate.

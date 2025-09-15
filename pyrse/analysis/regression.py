@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+# from copy import deepcopy
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
@@ -6,6 +7,8 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.gaussian_process import GaussianProcessRegressor as SKGaussianProcess
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 from sklearn.preprocessing import PolynomialFeatures
+
+from pyrse.analysis.coefficient_utils import CoefficientSample
 
 class BaseRegressor:
     def __init__(self):
@@ -44,6 +47,38 @@ class BaseRegressor:
         new_regressor.fit(samples)
         return CompoundRegressor([self, new_regressor], mode='sequential')
     
+    def filter_samples(self, samples: List[CoefficientSample], 
+                       ignore: Optional[List[str]] = None) -> List[CoefficientSample]:
+        """
+        Returns a new list of CoefficientSample with specified parameters removed.
+        
+        Parameters
+        ----------
+        samples : List[CoefficientSample]
+            Original list of samples to filter.
+        ignore : Optional[List[str]]
+            List of parameter names to remove from each sample. If None, no filtering is done.
+        
+        Returns
+        -------
+        List[CoefficientSample]
+            New list of samples with parameters removed.
+        """
+        ignore_set = set(ignore) if ignore else set()
+        filtered_samples = []
+
+        for sample in samples:
+            filtered_params = {k: v for k, v in sample.parameters.items() if k not in ignore_set}
+            filtered_samples.append(
+                CoefficientSample(
+                    coefficient=sample.coefficient,
+                    parameters=filtered_params,
+                    weight=sample.weight
+                )
+            )
+
+        return filtered_samples
+        
     def _compute_param_stats(self, samples):
         stats = {}
         param_names = list(samples[0].parameters.keys())
@@ -126,7 +161,7 @@ class KNearestNeighborRegressor(BaseRegressor):
         self.samples = []
         self.k = k  # can be None; will set dynamically at fit
 
-    def fit(self, samples: List[Dict]) -> Tuple[List[float], Dict]:
+    def fit(self, samples):
         """
         Store samples and compute residuals against k-NN predictions.
         """
@@ -303,11 +338,6 @@ class PolynomialRegressor(BaseRegressor):
         return value, uncert
 
 
-import numpy as np
-from sklearn.kernel_ridge import KernelRidge
-from typing import List, Dict, Tuple
-from copy import deepcopy
-
 class RBFRegressor(BaseRegressor):
     def __init__(self, alpha=1e-5, gamma=None, n_bootstrap=5, random_seed=42):
         """
@@ -389,104 +419,6 @@ class RBFRegressor(BaseRegressor):
         return val, conf
 
 
-# import numpy as np
-# from sklearn.gaussian_process import GaussianProcessRegressor as SKGP
-# from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-# from typing import List, Dict, Tuple
-
-# class GaussianProcessRegressor(BaseRegressor):
-#     def __init__(self, alpha=1e-4, n_bootstrap=50, random_seed=42, n_restarts_optimizer=5):
-#         """
-#         alpha: observation noise (fixed)
-#         n_bootstrap: number of bootstrap models for uncertainty
-#         random_seed: reproducibility
-#         n_restarts_optimizer: number of restarts for hyperparameter optimization
-#         """
-#         super().__init__()
-#         self.alpha = alpha
-#         self.n_bootstrap = n_bootstrap
-#         self.random_seed = random_seed
-#         self.n_restarts_optimizer = n_restarts_optimizer
-#         self.model = None
-#         self.bootstrap_models = []
-#         self._X_min = None
-#         self._X_range = None
-
-#     def _normalize_X(self, X: np.ndarray) -> np.ndarray:
-#         return (X - self._X_min) / (self._X_range + 1e-12)
-
-#     def fit(self, samples: List[Dict]) -> Tuple[List[float], Dict]:
-#         self._compute_param_stats(samples)
-#         X = np.array([[s.parameters[name] for name in self.param_names] for s in samples])
-#         y = np.array([s.coefficient for s in samples])
-
-#         # Normalize inputs
-#         self._X_min = X.min(axis=0)
-#         self._X_range = np.ptp(X, axis=0)
-#         X_norm = self._normalize_X(X)
-
-#         # Data-driven length scale bounds: 0.01–1.0 fraction of parameter spread
-#         length_scale_bounds = [(0.01, 1.0) for _ in self.param_names]
-#         length_scale_init = np.array([0.1 for _ in self.param_names])  # initial guess
-
-#         # Data-driven signal variance bounds based on target RMS
-#         y_rms = np.std(y)
-#         kernel = C(y_rms ** 2, (y_rms**2 * 0.01, y_rms**2 * 100)) * \
-#                  RBF(length_scale=length_scale_init, length_scale_bounds=length_scale_bounds)
-
-#         # Fit GP with hyperparameter optimization
-#         self.model = SKGP(kernel=kernel, alpha=self.alpha, normalize_y=True,
-#                           optimizer='fmin_l_bfgs_b', n_restarts_optimizer=self.n_restarts_optimizer)
-#         self.model.fit(X_norm, y)
-
-#         # Compute residuals
-#         y_pred = self.model.predict(X_norm)
-#         self.residuals = (y - y_pred).tolist()
-#         self.goodness_of_fit = {
-#             "rmse": float(np.sqrt(np.mean((y - y_pred) ** 2))),
-#             "n_samples": len(samples),
-#         }
-
-#         # Bootstrap models for uncertainty estimation
-#         rng = np.random.default_rng(self.random_seed)
-#         self.bootstrap_models = []
-#         for _ in range(self.n_bootstrap):
-#             indices = rng.integers(0, len(samples), size=len(samples))
-#             X_bs, y_bs = X_norm[indices], y[indices]
-#             model_bs = SKGP(kernel=kernel, alpha=self.alpha, normalize_y=True)
-#             model_bs.fit(X_bs, y_bs)
-#             self.bootstrap_models.append(model_bs)
-
-#         return self.residuals, self.goodness_of_fit
-
-#     def update(self, samples: List[Dict]) -> None:
-#         # GP cannot update incrementally; just refit
-#         self.fit(samples)
-
-#     def __call__(self, **params) -> Tuple[float, float]:
-#         if self.model is None:
-#             raise ValueError("Regressor not fitted yet.")
-#         params = self._fill_missing_params(params)
-#         X = np.array([[params[name] for name in self.param_names]])
-#         X_norm = self._normalize_X(X)
-
-#         # Predict mean
-#         val = float(self.model.predict(X_norm)[0])
-
-#         # Bootstrap uncertainty: std of predictions across bootstrap models
-#         if self.bootstrap_models:
-#             preds = [m.predict(X_norm)[0] for m in self.bootstrap_models]
-#             conf = float(np.std(preds))
-#         else:
-#             conf = float(np.std(self.residuals)) if self.residuals else 0.0
-
-#         return val, conf
-
-import numpy as np
-from sklearn.gaussian_process import GaussianProcessRegressor as SKGP
-from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
-from typing import List, Dict, Tuple
-
 class GaussianProcessRegressor(BaseRegressor):
     def __init__(self, alpha=1e-4, length_scale=None, length_scale_bounds=(0.05, 0.5), optimizer=None):
         """
@@ -529,7 +461,7 @@ class GaussianProcessRegressor(BaseRegressor):
             length_scale = list(self.length_scale)
 
         kernel = C(1.0) * RBF(length_scale=length_scale, length_scale_bounds=[self.length_scale_bounds]*n_features)
-        self.model = SKGP(kernel=kernel, alpha=self.alpha, optimizer=self.optimizer, normalize_y=True)
+        self.model = SKGaussianProcess(kernel=kernel, alpha=self.alpha, optimizer=self.optimizer, normalize_y=True)
         self.model.fit(X_norm, y)
 
         y_pred, y_std = self.model.predict(X_norm, return_std=True)

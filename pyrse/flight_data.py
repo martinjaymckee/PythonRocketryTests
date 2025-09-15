@@ -13,6 +13,7 @@ import scipy.signal as signal
 
 from pyrse import flight_data_events
 from pyrse import flight_data_filters
+from pyrse import flight_data_orientation
 from pyrse import quaternion
 from pyrse import vector3d
 
@@ -43,7 +44,8 @@ from pyrse import vector3d
 
 class FlightDataUnitConverter:
     __unit_map = {
-        'm' : 1.0, 'Feet' : 1 / 3.28,
+        'm' : 1.0, 'Feet' : 1 / 3.28, 'cm': 1/10.0,
+        'cm²' : 1/100.0,
         'Miles / Hour' : 0.44704, 'mph' : 0.44704, 'fps' : 0.3048,
         '°' : 1 / 57.2958, 'deg' : 1 / 57.2958, 'Degrees' : 1 / 57.2958, 'rad' : 1.0, 'Radians' : 1.0,
         '°/s' : 1 / 57.2958, 'Radians / Second' : 1.0, 'rad/s' : 1.0, 'Degrees / Second' : 1 / 57.2958, 'deg/s' :  1 / 57.2958,
@@ -80,74 +82,6 @@ class FlightData(dict):
             self.__ts = ts
             self.__dx = dx
             self.__ddx = ddx
-
-# class Series:
-    # def __init__(self, times: np.ndarray, values: np.ndarray,
-    #              first_derivative: np.ndarray = None,
-    #              second_derivative: np.ndarray = None):
-    #     self.times = np.asarray(times)
-    #     self.values = np.asarray(values)
-    #     self.first_derivative = np.asarray(first_derivative) if first_derivative is not None else None
-    #     self.second_derivative = np.asarray(second_derivative) if second_derivative is not None else None
-
-    #     # Sort by time if necessary
-    #     if np.any(np.diff(self.times) < 0):
-    #         idx = np.argsort(self.times)
-    #         self.times = self.times[idx]
-    #         self.values = self.values[idx]
-    #         if self.first_derivative is not None:
-    #             self.first_derivative = self.first_derivative[idx]
-    #         if self.second_derivative is not None:
-    #             self.second_derivative = self.second_derivative[idx]
-
-    # def at(self, t: float) -> float:
-    #     """
-    #     Interpolate the series at time t using value, first derivative, and optionally second derivative.
-    #     """
-    #     # locate interval
-    #     if t <= self.times[0]:
-    #         idx = 0
-    #     elif t >= self.times[-1]:
-    #         idx = -2
-    #     else:
-    #         idx = np.searchsorted(self.times, t) - 1
-
-    #     t0, t1 = self.times[idx], self.times[idx + 1]
-    #     y0, y1 = self.values[idx], self.values[idx + 1]
-    #     dt = t1 - t0
-    #     alpha = (t - t0) / dt
-
-    #     # estimate first derivative if missing
-    #     if self.first_derivative is not None:
-    #         dy0 = self.first_derivative[idx]
-    #         dy1 = self.first_derivative[idx + 1]
-    #     else:
-    #         dy0 = (y1 - y0) / dt
-    #         dy1 = dy0
-
-    #     # check if second derivative is available
-    #     if self.second_derivative is not None:
-    #         ddy0 = self.second_derivative[idx]
-    #         ddy1 = self.second_derivative[idx + 1]
-    #         # Hermite cubic with acceleration (Taylor expansion at endpoints)
-    #         h00 = 1 - 3*alpha**2 + 2*alpha**3
-    #         h10 = alpha - 2*alpha**2 + alpha**3
-    #         h20 = 0.5*(alpha**2 - alpha**3)
-    #         h01 = 3*alpha**2 - 2*alpha**3
-    #         h11 = -alpha**2 + alpha**3
-    #         h21 = 0.5*(alpha**2 - alpha**3)
-
-    #         y_interp = (h00*y0 + h10*dt*dy0 + h20*dt**2*ddy0 +
-    #                     h01*y1 + h11*dt*dy1 + h21*dt**2*ddy1)
-    #     else:
-    #         # standard cubic Hermite using value and first derivative
-    #         h00 = 2*alpha**3 - 3*alpha**2 + 1
-    #         h10 = alpha**3 - 2*alpha**2 + alpha
-    #         h01 = -2*alpha**3 + 3*alpha**2
-    #         h11 = alpha**3 - alpha**2
-    #         y_interp = h00*y0 + h10*dt*dy0 + h01*y1 + h11*dt*dy1
-
-    #     return y_interp
 
         def __bool__(self):
             return self.valid
@@ -474,7 +408,7 @@ class FlightData(dict):
         burnout_detector = flight_data_events.FlightDataBurnoutDetector()
         preapogee_detector = flight_data_events.FlightDataPreapogeeDetector()
         apogee_detector = flight_data_events.FlightDataApogeeDetector()
-        # TODO: CREATE A LANDING DETECTOR
+        landing_detector = flight_data_events.FlightDataLandingDetector()
         events = []
 
         ts = self['t'].values
@@ -482,7 +416,8 @@ class FlightData(dict):
         Vzs = self['Vzraw'].values # TODO: CHECK HOW THE FILTERED (INTERPOLATED) VALUES ARE CALCULATED....
         use_quaternions = ('qw' in self)
         azs = self['az'].values
-        if use_quaternions: # TODO: CALCULATE THESE FROM THE AX/AY/AZ VALUES AND QW/QX/QY/QZ DATA, IF AVAILABLE....
+        azs_rot = azs
+        if False and use_quaternions: # TODO: CALCULATE THESE FROM THE AX/AY/AZ VALUES AND QW/QX/QY/QZ DATA, IF AVAILABLE....
             vs = []
             axs = self['ax'].values
             ays = self['ay'].values
@@ -501,7 +436,7 @@ class FlightData(dict):
             azs_rot = []
             for v, q in zip(vs, qs):
                 azs_rot.append(-quaternion.rotate_vector(q, v).z)
-        azs_rot = np.array(azs_rot) # TODO: THIS IS JUST THE WORLD COORDINATE ACCELERATIONS....
+            azs_rot = np.array(azs_rot) # TODO: THIS IS JUST THE WORLD COORDINATE ACCELERATIONS....
         # fig, axs = plt.subplots(2, layout='constrained', sharex=True)
         # axs[0].plot(ts, azs)
         # axs[0].plot(ts, azs_rot)
@@ -509,17 +444,17 @@ class FlightData(dict):
 
         t_last = ts[0]
         for t, h, Vz, az in zip(ts, hs, Vzs, azs_rot):
-            az -= 9.80665
+            az_corr = az - 9.80665 # TODO: REPLACE WITH LOCAL GRAVITY VALUE FROM ENVIRONMENT (pyrse.environment)
             #print('t = {}, h = {}, Vz = {}, az = {}'.format(t, h, Vz, az))
             dt = t - t_last
-            liftoff_event = liftoff_detector(dt, az)
+            liftoff_event = liftoff_detector(dt, az_corr)
             if liftoff_event.detected:
                 events.append(FlightData.Event('Launch', t))
                 events.append(FlightData.Event('Ignition', t - liftoff_event.t)) # TODO: ADD THE ABILITY TO TRACK AIRSTART EVENTS
                 burnout_detector.start()
                 preapogee_detector.start()
                 apogee_detector.start()
-            burnout_event = burnout_detector(dt, az)
+            burnout_event = burnout_detector(dt, az_corr)
             if burnout_event.detected:
                 events.append(FlightData.Event('Burnout', t)) # TODO: ADD AN ID TO EVENTS TO ALLOW FOR MULTIPLE IGNITION AND BURNOUT EVENTS                
             preapogee_event = preapogee_detector(dt, Vz)
@@ -530,7 +465,11 @@ class FlightData(dict):
                 events.append(FlightData.Event('Apogee', t))
                 burnout_detector.stop()
                 preapogee_detector.stop()
-                # TODO: START THE LANDING DETECTOR
+                landing_detector.start()
+            landing_event = landing_detector(dt, az_corr, Vz, h)
+            if landing_event.detected:
+                events.append(FlightData.Event('Landed', t))
+                # landing_detector.stop()
             t_last = t
         
         self.addEvents(events, force=force)
@@ -1230,6 +1169,11 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
         Vzs_kf = signal.savgol_filter(Vzs, 251, 5, delta=0.002)
         Vhs_kf = signal.savgol_filter(Vhs, 251, 5, delta=0.002)
 
+        orientation_estimator = flight_data_orientation.IMUOrientationEstimator()
+        orientation_estimator.estimate(ts, axs, ays, azs)
+        axs, ays, azs = orientation_estimator.rotate_accels(axs, ays, azs, 'rocket')
+        gxs, gys, gzs = orientation_estimator.rotate_gyros(gxs, gys, gzs, 'rocket')
+
         all_mask = [True]*len(Vzs_kf)
         series_defs = [
             ('t', np.array(ts), None, 'Measured', 'Time since liftoff (s)'),
@@ -1239,9 +1183,9 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
             ('Vhraw', np.array(Vhs), interpolation_mask, 'Measured', 'Radial velocity (m/s)'),            
             ('hraw', np.array(hs), interpolation_mask, 'Measured', 'Altitude above the pad (m)'),
             ('h', np.array(hs_kf), interpolation_mask, 'Calculated', 'Altitude above the pad (m)'),
-            ('ax', azs, None, 'Measured', 'Axial acceleration (m/s^2)'),
+            ('ax', axs, None, 'Measured', 'Axial acceleration (m/s^2)'),
             ('ay', ays, None, 'Measured', 'Axial acceleration (m/s^2)'),
-            ('az', axs, None, 'Measured', 'Axial acceleration (m/s^2)'),
+            ('az', azs, None, 'Measured', 'Axial acceleration (m/s^2)'),
             ('gx', gzs, None, 'Measured', 'Body frame angular rates (deg/s)'),
             ('gy', gys, None, 'Measured', 'Body frame angular rates (deg/s)'),
             ('gz', gxs, None, 'Measured', 'Body frame angular rates (deg/s)'),
@@ -1352,17 +1296,30 @@ def loadOpenRocketExport(filename):
     try:
         fd = FlightData()
         df = None
+
+        header_next = False
+        header_found = False        
         with open(path, 'r') as file:
+            sim_name = None
             events = []
+            warnings = []
             headers = []
             for idx, line in enumerate(file.readlines()): # Parse header and events
-                if line[0]== '#':
-                    if idx == 3: # Parse the headers
+                if line[0] == '#':
+                    line = line.strip()
+                    #print(line)                    
+                    if idx == 0:
+                        sim_name = line[1:].strip() # TOODO: MAYBE DO SOMETHING ELSE WITH THIS VALUE, IT APPARENTLY HAS A STATUS AT THE END WHICH ISN'T TERRIBLY USEFUL... THIS SHOULD PROBABLY BE THE DESCRIPTION, ACTUALLY
+                    elif idx == 1:   
+                        sim_params = line[1:].strip() # TODO: PARSE THE NUMBER OF DATA POINTS OUT OF THIS TO DOUBLE CHECK THE FLIGHT DATA LENGTH LATER
+                    elif header_next: # Parse the headers
                         line = line[1:]
                         headers = [n.strip() for n in line.split(',')]
                         headers = [name.replace('Â', '') for name in headers]
                         headers = [name.replace('(â€‹)', '').strip() for name in headers]
-                    else:
+                        header_found = True
+                        header_next = False
+                    elif header_found:
                         if line.startswith('# Event'):
                             try:
                                 txt = line[8:]
@@ -1371,6 +1328,11 @@ def loadOpenRocketExport(filename):
                                 events.append( (evt_name, t) )
                             except Exception as e:
                                 print('ERROR: While parsing event line \"{}\" - {}'.format(line, e))
+                    else:
+                        if line == '#':
+                            header_next = True
+                        else:
+                            warnings.append( line[1:].strip() )
             evt_map = {
                 'IGNITION':'Ignition', 'LAUNCH':'Launch', 'LIFTOFF':'Liftoff', 'LAUNCHROD':'Cleared Guide', 
                 'BURNOUT':'Burnout', 'APOGEE':'Apogee', 'EJECTION_CHARGE':'Charge', 'RECOVERY_DEVICE_DEPLOYMENT':'Deployment',
@@ -1404,7 +1366,11 @@ def loadOpenRocketExport(filename):
                 ('V', 'Total velocity (m/s)', 'Total Velocity (m/s)'),
                 ('aoa', 'Angle of attack (°)', 'Angle of attack (rad)'),
                 ('mass', 'Mass (g)', 'Total mass of rocket (kg)'),
-                ('Cd', 'Drag coefficient', 'Total Coefficient of Drag')
+                ('Cd', 'Axial drag coefficient', 'Total Coefficient of Drag'),
+                ('Cl', 'Normal force coefficient', 'Total Coefficient of Lift'),
+                ('Cm', 'Pitch moment coefficient', 'Pitching Moment Coefficient'),
+                ('Lref', 'Reference length (cm)', 'Reference Length (m)'),
+                ('Sref', 'Reference area (cm²)', 'Reference Area (m^2)')                                
             ]            
             for dest, src, desc in series_defs:
                 scale_map = {header:FlightDataUnitConverter.standard_scale(unit) for header, unit in zip(headers, units)}
@@ -1416,7 +1382,37 @@ def loadOpenRocketExport(filename):
                         'description': desc
                     }   
                 except Exception as e:
-                    print('Error: While adding flight data - {} to {}'.format(src, dest))
+                    print('Error: While adding flight data - {} to {} -> {}'.format(src, dest, e))
+
+        # all_mask = [True]*len(Vzs_kf)
+        # series_defs = [
+        #     ('t', np.array(ts), None, 'Measured', 'Time since liftoff (s)'),
+        #     ('Vz', np.array(Vzs_kf), all_mask, 'Calculated', 'Axial velocity (m/s)'),
+        #     ('Vzraw', np.array(Vzs), interpolation_mask, 'Measured', 'Axial velocity (m/s)'),
+        #     ('Vh', np.array(Vhs_kf), all_mask, 'Calculated', 'Radial velocity (m/s)'),
+        #     ('Vhraw', np.array(Vhs), interpolation_mask, 'Measured', 'Radial velocity (m/s)'),            
+        #     ('hraw', np.array(hs), interpolation_mask, 'Measured', 'Altitude above the pad (m)'),
+        #     ('h', np.array(hs_kf), interpolation_mask, 'Calculated', 'Altitude above the pad (m)'),
+        #     ('ax', azs, None, 'Measured', 'Axial acceleration (m/s^2)'),
+        #     ('ay', ays, None, 'Measured', 'Axial acceleration (m/s^2)'),
+        #     ('az', axs, None, 'Measured', 'Axial acceleration (m/s^2)'),
+        #     ('gx', gzs, None, 'Measured', 'Body frame angular rates (deg/s)'),
+        #     ('gy', gys, None, 'Measured', 'Body frame angular rates (deg/s)'),
+        #     ('gz', gxs, None, 'Measured', 'Body frame angular rates (deg/s)'),
+        #     ('qw', ws, None, 'Measured', 'Quaternion Component W'),
+        #     ('qx', xs, None, 'Measured', 'Quaternion Component X'),
+        #     ('qy', ys, None, 'Measured', 'Quaternion Component Y'),
+        #     ('qz', zs, None, 'Measured', 'Quaternion Component Z'),
+        #     ('off_vertical', off_verticals, all_mask, 'Calculated', 'Angle from vertical (radians)')
+        # ]            
+        # for dest, data, interp_mask, source, desc in series_defs:
+        #     fd[dest] = {
+        #         'values': data,
+        #         'interpolation_mask': interp_mask,
+        #         'source': source,
+        #         'description': desc
+        #     }
+
             return fd         
     except Exception as e:
         print(e)

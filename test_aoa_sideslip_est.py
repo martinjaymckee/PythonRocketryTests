@@ -131,99 +131,124 @@ if __name__ == '__main__':
 
 
     m0 = 0.750
+    flight_constants = {
+        'Sref': 0.00934,
+        'Lref': math.pi * (.0934/2)**2,
+        'h0': 5500.0 / 3.28
+    }
+
     eng = engines.Engine.RSE(r'D:\User Data\Documents\Rockets\PythonRocketryTests\Engines\AeroTech_G74W.rse')
-    or_flight_data = loadOpenRocketExport(r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\OpenRocket\Exports\or_sa_5_g74_1.csv")
+    or_flight_data = loadOpenRocketExport(
+                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\OpenRocket\Exports\or_sa_5_g74_1.csv",
+                                        constants = flight_constants
+                                    )
     br_flight_data = loadBlueRavenLog(
                                         r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5_summary_09-06-2025_10_03_11_.csv",
                                         r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5 LR_09-06-2025_10_03_11.csv",
-                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5 HR_09-06-2025_10_03_11.csv"
+                                        r"D:\User Data\Documents\Rockets\HPR\Saturn I Block 2 (SA-5)\Flight Data\Boilerplate\Flight 1\MJM SA-5 HR_09-06-2025_10_03_11.csv",
+                                        constants = flight_constants
                                     )   
-    br_flight_data.updateEvents()
 
-    marker_size = 10
-    num_est_points = 25
-    fig, axs = plt.subplots(3, layout='constrained')
+    # marker_size = 10
+    # num_est_points = 25
+    # fig, axs = plt.subplots(3, layout='constrained')
 
-    cd_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cd', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
-    cl_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cl', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
-    cm_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cm', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
+    # cd_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cd', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
+    # cl_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cl', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
+    # cm_mapping = CoefficientMapping.FromFlightData(or_flight_data, 'Cm', ['aoa'])#, pyrse_regress.KNearestNeighborRegressor())
 
-    aoas = or_flight_data['aoa'].values
-    est_aoas = np.linspace(0, np.nanmax(aoas), num_est_points)
+    # aoas = or_flight_data['aoa'].values
+    # est_aoas = np.linspace(0, np.nanmax(aoas), num_est_points)
     
-    axs[0].scatter(57.3 * aoas, or_flight_data['Cd'].values, s=marker_size)
-    cds_est = np.array([cd_mapping({'aoa': alpha})[0] for alpha in est_aoas])
-    axs[0].scatter(57.3 * est_aoas, cds_est, s=marker_size)
+    # axs[0].scatter(57.3 * aoas, or_flight_data['Cd'].values, s=marker_size)
+    # cds_est = np.array([cd_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    # axs[0].scatter(57.3 * est_aoas, cds_est, s=marker_size)
 
-    axs[1].scatter(57.3 * aoas, or_flight_data['Cl'].values, s=marker_size)
-    cls_est = np.array([cl_mapping({'aoa': alpha})[0] for alpha in est_aoas])
-    axs[1].scatter(57.3 * est_aoas, cls_est, s=marker_size)
+    # axs[1].scatter(57.3 * aoas, or_flight_data['Cl'].values, s=marker_size)
+    # cls_est = np.array([cl_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    # axs[1].scatter(57.3 * est_aoas, cls_est, s=marker_size)
 
-    axs[2].scatter(57.3 * aoas, or_flight_data['Cm'].values, s=marker_size)
-    cms_est = np.array([cm_mapping({'aoa': alpha})[0] for alpha in est_aoas])
-    axs[2].scatter(57.3 * est_aoas, cms_est, s=marker_size)
+    # axs[2].scatter(57.3 * aoas, or_flight_data['Cm'].values, s=marker_size)
+    # cms_est = np.array([cm_mapping({'aoa': alpha})[0] for alpha in est_aoas])
+    # axs[2].scatter(57.3 * est_aoas, cms_est, s=marker_size)
 
-    # Define thrust and mass
-    def thrust(t): return eng.thrust(t)
-    def mass(t): return eng.calc_mass(t) + m0
+    # # Define thrust and mass
+    # def thrust(t): return eng.thrust(t)
+    # def mass(t): return eng.calc_mass(t) + m0
 
-    # Aerodynamic coefficients
-    def C_l(alpha): return cl_mapping({'aoa': alpha})
-    def C_d(alpha): return cd_mapping({'aoa': alpha})
-    def C_y(beta): return cm_mapping({'aoa': 0})
+    # # Aerodynamic coefficients
+    # def C_l(alpha): return cl_mapping({'aoa': alpha})
+    # def C_d(alpha): return cd_mapping({'aoa': alpha})
+    # def C_y(beta): return cm_mapping({'aoa': 0})
 
-    fig_summary, axs_summary = plt.subplots(3, layout='constrained', sharex=True)
-    fig_summary.suptitle('Flight Summary')
+    # fig_summary, axs_summary = plt.subplots(3, layout='constrained', sharex=True)
+    # fig_summary.suptitle('Flight Summary')
 
-    ts = br_flight_data['t'].values
-    axs_summary[0].plot(ts, br_flight_data['az'].values, label='az')
-    axs_summary[0].set_title('Vertical Acceleration')
-    axs_summary[0].set_ylabel('Acceleration ($m/s^2$)')
-    axs_summary[1].plot(ts, br_flight_data['Vz'].values, label='Vz')
-    axs_summary[1].set_title('Vertical Velocity')
-    axs_summary[1].set_ylabel('Velocity ($m/s$)')
-    axs_summary[2].plot(ts, br_flight_data['h'].values, label='h')
-    axs_summary[2].set_title('Altitude')
-    axs_summary[2].set_ylabel('Altitude ($m$)')
-    axs_summary[2].set_xlabel('Time (s)')
-    axs_summary[0].grid()
+    # ts = br_flight_data['t'].values
+    # axs_summary[0].plot(ts, br_flight_data['az'].values, label='az')
+    # axs_summary[0].set_title('Vertical Acceleration')
+    # axs_summary[0].set_ylabel('Acceleration ($m/s^2$)')
+    # axs_summary[1].plot(ts, br_flight_data['Vz'].values, label='Vz')
+    # axs_summary[1].set_title('Vertical Velocity')
+    # axs_summary[1].set_ylabel('Velocity ($m/s$)')
+    # axs_summary[2].plot(ts, br_flight_data['h'].values, label='h')
+    # axs_summary[2].set_title('Altitude')
+    # axs_summary[2].set_ylabel('Altitude ($m$)')
+    # axs_summary[2].set_xlabel('Time (s)')
+    # axs_summary[0].grid()
 
-    print(br_flight_data.events)
-    for idx, (name, evt) in enumerate(br_flight_data.events.items()):
-        for ax in axs_summary:
-            t = evt.t
-            c = evt.color
-            ax.axvline(t, color=c, linestyle='--')
-            height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
-            ax.text(t, height, name, rotation=90, verticalalignment='top')
+    # print(br_flight_data.events)
+    # for idx, (name, evt) in enumerate(br_flight_data.events.items()):
+    #     for ax in axs_summary:
+    #         t = evt.t
+    #         c = evt.color
+    #         ax.axvline(t, color=c, linestyle='--')
+    #         height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
+    #         ax.text(t, height, name, rotation=90, verticalalignment='top')
 
-    fig_detail, axs_detail = plt.subplots(3, layout='constrained', sharex=True)
-    fig_detail.suptitle('Ascent Summary')
+    # fig_detail, axs_detail = plt.subplots(3, layout='constrained', sharex=True)
+    # fig_detail.suptitle('Ascent Summary')
 
-    ts = br_flight_data['t'].values
-    t_apogee = br_flight_data.events['Apogee'].t if 'Apogee' in br_flight_data.events else ts[-1]
-    idx_apogee = np.searchsorted(ts, t_apogee)
-    ts = ts[:idx_apogee]
-    axs_detail[0].plot(ts, br_flight_data['az'].values[:idx_apogee], label='az')
-    axs_detail[0].set_title('Vertical Acceleration')
-    axs_detail[0].set_ylabel('Acceleration ($m/s^2$)')
-    axs_detail[1].plot(ts, br_flight_data['Vz'].values[:idx_apogee], label='Vz')
-    axs_detail[1].set_title('Vertical Velocity')
-    axs_detail[1].set_ylabel('Velocity ($m/s$)')
-    axs_detail[2].plot(ts, br_flight_data['h'].values[:idx_apogee], label='h')
-    axs_detail[2].set_title('Altitude')
-    axs_detail[2].set_ylabel('Altitude ($m$)')
-    axs_detail[2].set_xlabel('Time (s)')
-    axs_detail[0].grid()
+    # ts = br_flight_data['t'].values
+    # t_apogee = br_flight_data.events['Apogee'].t if 'Apogee' in br_flight_data.events else ts[-1]
+    # idx_apogee = np.searchsorted(ts, t_apogee)
+    # ts = ts[:idx_apogee]
+    # axs_detail[0].plot(ts, br_flight_data['az'].values[:idx_apogee], label='az')
+    # axs_detail[0].set_title('Vertical Acceleration')
+    # axs_detail[0].set_ylabel('Acceleration ($m/s^2$)')
+    # axs_detail[1].plot(ts, br_flight_data['Vz'].values[:idx_apogee], label='Vz')
+    # axs_detail[1].set_title('Vertical Velocity')
+    # axs_detail[1].set_ylabel('Velocity ($m/s$)')
+    # axs_detail[2].plot(ts, br_flight_data['h'].values[:idx_apogee], label='h')
+    # axs_detail[2].set_title('Altitude')
+    # axs_detail[2].set_ylabel('Altitude ($m$)')
+    # axs_detail[2].set_xlabel('Time (s)')
+    # axs_detail[0].grid()
 
-    for idx, (name, evt) in enumerate(br_flight_data.events.items()):
-        for ax in axs_detail:
-            t = evt.t
-            c = evt.color
-            ax.axvline(t, color=c, linestyle='--')
-            height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
-            ax.text(t, height, name, rotation=90, verticalalignment='top')
+    # for idx, (name, evt) in enumerate(br_flight_data.events.items()):
+    #     for ax in axs_detail:
+    #         t = evt.t
+    #         c = evt.color
+    #         ax.axvline(t, color=c, linestyle='--')
+    #         height = ax.get_ylim()[1] * 0.9 if (idx % 2) == 0 else ax.get_ylim()[1] * 0.4
+    #         ax.text(t, height, name, rotation=90, verticalalignment='top')
+    
+    fig_derived, axs_derived = plt.subplots(4, layout='constrained', sharex=True)
+    axs_derived[0].plot(or_flight_data['t'], or_flight_data['M'].values, label='M')
+    axs_derived[1].plot(or_flight_data['t'], or_flight_data['Re'].values, label='Re')
+    axs_derived[2].plot(or_flight_data['t'], or_flight_data['h'].values, label='Altitude')
+    axs_derived[3].plot(or_flight_data['t'], or_flight_data['Vz'].values, label='Velocity')
+    axs_derived[0].plot(br_flight_data['t'], br_flight_data['M'].values, label='M')
+    axs_derived[1].plot(br_flight_data['t'], br_flight_data['Re'].values, label='Re')
+    axs_derived[2].plot(br_flight_data['t'], br_flight_data['h'].values, label='Altitude')
+    axs_derived[3].plot(br_flight_data['t'], br_flight_data['Vz'].values, label='Velocity')
+
     plt.show()
+
+
+
+
+
 
     # ekf = RocketEKFJacobian(mass, thrust, S_ref=0.05)
     # ekf.set_aero_coefficients(C_l, C_d, C_y)

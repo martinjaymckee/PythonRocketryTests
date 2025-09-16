@@ -5,7 +5,7 @@ from typing import List, Dict, Tuple, Optional
 import numpy as np
 
 import pyrse.analysis.regression as regres
-
+from pyrse.analysis.coefficient_utils import CoefficientSample
 
 class ParameterStatistics:
     def __init__(self, samples):
@@ -46,13 +46,6 @@ class ParameterStatistics:
 
     def summary(self):
         return self.stats
-
-
-@dataclass
-class CoefficientSample:
-    coefficient: float
-    parameters: Dict[str, float]
-    weight: float = 1.0
 
 
 class CoefficientMapping:

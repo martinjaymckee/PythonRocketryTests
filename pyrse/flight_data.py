@@ -3,16 +3,15 @@ import math
 import os
 import os.path
 
+import ambiance
 import matplotlib.pyplot as plt
-
 import numpy as np
 import pandas as pd
-
-import scipy.interpolate as interpolate
+# import scipy.interpolate as interpolate
 import scipy.signal as signal
 
 from pyrse import flight_data_events
-from pyrse import flight_data_filters
+# from pyrse import flight_data_filters
 from pyrse import flight_data_orientation
 from pyrse import quaternion
 from pyrse import vector3d
@@ -70,7 +69,6 @@ class FlightData(dict):
     valid_sources = ['Measured', 'Calculated', 'Unknown']
 
     class Series:
-
         def __init__(self, parent, name, values = None, errors=None, interpolation_mask=None, source='Unknown', description=None, ts=None, dx=None, ddx=None):
             self.__parent = parent
             self.__name = name
@@ -274,10 +272,47 @@ class FlightData(dict):
                 return FlightData.Event.predefined_colors[self.__name]
             return FlightData.Event.default_color
 
-    def __init__(self):
+    def __init__(self, constants={}):
         super().__init__()
         self.__files = None
         self.__events = {}
+        self.__constants = constants
+
+    def generate_derived_series(self):
+        # ts = self['t'].values if 't' in self else None
+        Vs = np.abs(self['Vz'].values) #self['V'].values if 'V' in self else self['Vz'].values) TODO: FIGURE OUT WHY THE VELOCITY MAGNITUDES AREN'T WORKING OUT RIGHT
+        h0 = 0 if 'h0' not in self.__constants else self.__constants['h0']
+        hs_asl = (self['h'].values + h0 ) # TODO: USE ALTITUDE ABOVE SEA LEVEL IF AVAILABLE
+        # Ps = None
+        if 'P' in self:
+            Ps = self['P'].values
+            atmos = ambiance.Atmosphere.from_pressure(Ps)
+        else:
+            atmos = ambiance.Atmosphere(hs_asl)
+            # Ps = atmos.pressure
+        rhos = atmos.density
+        mus = atmos.dynamic_viscosity
+        sos = atmos.speed_of_sound
+
+        self['M'] = {
+            'values' : Vs / sos,
+            'source': 'Calculated',
+            'description': 'Mach number (unitless)'
+        }
+
+        if 'Lref' in self.__constants:
+            self['Re'] = {
+                'values' : rhos * Vs * self.__constants['Lref'] / mus,
+                'source': 'Calculated',
+                'description': 'Reynolds number (unitless)'
+            }
+        # fig, axs = plt.subplots(6, layout='constrained', sharex=True)
+        # axs[0].plot(ts, rhos, label='Density (kg/m^3)')
+        # axs[1].plot(ts, mus, label='Dynamic Viscosity (kg/m/s)')
+        # axs[2].plot(ts, sos, label='Speed of Sound (m/s)')
+        # axs[3].plot(ts, Vs, label='Velocity (m/s)') 
+        # axs[4].plot(ts, hs_asl, label='Altitude (m)')
+        # axs[5].plot(ts, Ps, label='Pressure (Pa)')
 
     def __getitem__(self, k):
 
@@ -1036,14 +1071,14 @@ def generate_dummy_br_dfs(N, t0=-0.35, dt=0.002, M=5, pre=35, a=2.5):
 def loadFeatherweightTrackerLog(filename):
     pass
 
-def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, dummy=False, dummy_samples=155):
+def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, dummy=False, dummy_samples=155, constants={}):
     low_rate_path = os.path.abspath(low_rate_filename)
     high_rate_path = os.path.abspath(high_rate_filename)
 
     low_rate_log = None
     high_rate_log = None
     try:
-        fd = FlightData()
+        fd = FlightData(constants=constants)
         low_rate_df = None
         high_rate_df = None
         if dummy:
@@ -1076,6 +1111,7 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
         interpolation_mask = []
         hs = []
         hs_kf = []
+        Ps = []
         axs = []
         ays = []
         azs = []
@@ -1089,9 +1125,11 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
         Vzs_kf = []
         Vhs = []
         Vhs_kf = []
+        Vs = []
         off_verticals = []
 
         low_hs = low_rate_df['Baro_Altitude_AGL_(feet)'] / 3.28
+        low_Ps = low_rate_df['Baro_Press_(atm)'] * 101325.0
         low_v_ups = low_rate_df['Velocity_Up'] / 3.28
         low_v_cr = low_rate_df['Velocity_CR'] / 3.28
         low_v_dr = low_rate_df['Velocity_DR'] / 3.28
@@ -1123,10 +1161,12 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
             v0, v1 = low_v_ups[low_idx], low_v_ups[low_idx+1]
             v_cr_0, v_cr_1 = low_v_cr[low_idx], low_v_cr[low_idx+1]
             v_dr_0, v_dr_1 = low_v_dr[low_idx], low_v_dr[low_idx+1]
+            P0, P1 = low_Ps[low_idx], low_Ps[low_idx+1]
 
             high_idx = map_idxs[low_idx]
             dt = t_max - t_min
             dh = h1 - h0
+            dP = P1 - P0
             dv = v1 - v0
             dv_cr = v_cr_1 - v_cr_0
             dv_dr = v_dr_1 - v_dr_0
@@ -1139,6 +1179,7 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
                 ts.append(t_high)
                 interpolation_mask.append(t_high == t_min)
                 hs.append((p * dh) + h0)
+                Ps.append((p * dP) + P0)
                 ax, ay, az = axs_b[high_idx], ays_b[high_idx], azs_b[high_idx]
                 w, x, y, z = qs_w[high_idx], qs_x[high_idx], qs_y[high_idx], qs_z[high_idx]
                 ws.append(w)
@@ -1152,11 +1193,14 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
                 gzs.append(gzs_b[high_idx])
                 azs.append(as_f.z)      
                 ays.append(as_f.y)
-                axs.append(as_f.x)          
-                Vzs.append((p * dv) + v0)  
+                axs.append(as_f.x)         
+                Vz = (p * dv) + v0 
+                Vzs.append(Vz) 
                 Vcr = (p * dv_cr) + v_cr_0
                 Vdr = (p * dv_dr) + v_dr_0
                 Vhs.append(math.sqrt(Vcr**2 + Vdr**2))     
+                Vs.append(math.sqrt(Vz**2 + Vcr**2 + Vdr**2))     
+
                 high_idx += 1
                 if high_idx < len(high_ts): # Avoid a sync error
                     t_high = high_ts[high_idx]
@@ -1181,8 +1225,10 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
             ('Vzraw', np.array(Vzs), interpolation_mask, 'Measured', 'Axial velocity (m/s)'),
             ('Vh', np.array(Vhs_kf), all_mask, 'Calculated', 'Radial velocity (m/s)'),
             ('Vhraw', np.array(Vhs), interpolation_mask, 'Measured', 'Radial velocity (m/s)'),            
+            ('V', np.array(Vs), all_mask, 'Calculated', 'Total velocity magnitude (m/s)'),            
             ('hraw', np.array(hs), interpolation_mask, 'Measured', 'Altitude above the pad (m)'),
             ('h', np.array(hs_kf), interpolation_mask, 'Calculated', 'Altitude above the pad (m)'),
+            ('P', np.array(Ps), interpolation_mask, 'Measured', 'Static pressure (Pa)'),            
             ('ax', axs, None, 'Measured', 'Axial acceleration (m/s^2)'),
             ('ay', ays, None, 'Measured', 'Axial acceleration (m/s^2)'),
             ('az', azs, None, 'Measured', 'Axial acceleration (m/s^2)'),
@@ -1202,6 +1248,12 @@ def loadBlueRavenLog(summary_filename, low_rate_filename, high_rate_filename, du
                 'source': source,
                 'description': desc
             }
+
+        try:
+            fd.generate_derived_series()
+            fd.updateEvents()
+        except Exception as e:
+            print('Error: While generating derived series - {}'.format(e))
 
         return fd
     except Exception as e:
@@ -1290,11 +1342,11 @@ def loadRockSimExport(filename):
     return None
 
 
-def loadOpenRocketExport(filename):
+def loadOpenRocketExport(filename, constants={}):
     path = os.path.abspath(filename)
 
     try:
-        fd = FlightData()
+        fd = FlightData(constants=constants)
         df = None
 
         header_next = False
@@ -1412,7 +1464,10 @@ def loadOpenRocketExport(filename):
         #         'source': source,
         #         'description': desc
         #     }
-
+            try:
+                fd.generate_derived_series()
+            except Exception as e:
+                print('Error: While generating derived series - {}'.format(e))
             return fd         
     except Exception as e:
         print(e)

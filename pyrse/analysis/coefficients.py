@@ -71,6 +71,25 @@ class CoefficientMapping:
             samples.append(CoefficientSample(coeff_values[idx], sample_params))
         return CoefficientMapping(samples, regressor=regressor)
     
+    @classmethod
+    def FromArrays(self, coeffs: List[float], param_dict: Dict[str, List[float]], weights: Optional[List[float]] = None, regressor=None):
+        if not coeffs:
+            raise ValueError("Coefficient list cannot be empty.")
+        param_keys = set(param_dict.keys())
+        num_samples = len(coeffs)
+        for param, values in param_dict.items():
+            if len(values) != num_samples:
+                raise ValueError(f"Parameter '{param}' length does not match coefficient length.")
+        if weights is not None and len(weights) != num_samples:
+            raise ValueError("Weights length does not match coefficient length.")
+        
+        samples = []
+        for idx in range(num_samples):
+            sample_params = {param: param_dict[param][idx] for param in param_keys}
+            weight = weights[idx] if weights is not None else 1.0
+            samples.append(CoefficientSample(coeffs[idx], sample_params, weight))
+        return CoefficientMapping(samples, regressor=regressor)
+    
     def __init__(self, samples, regressor=None):
         """
         Wraps a set of CoefficientSample objects and a regressor value to a coefficient value and an uncertainty estimate.
